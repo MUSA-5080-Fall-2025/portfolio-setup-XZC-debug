@@ -7,6 +7,8 @@ date: "2025-09-08"
 - [List main concepts from lecture]
 - [Technical skills covered]
 how to use GIThub
+quarto document structure
+text formating
 
 ## Coding Techniques
 - [New R functions or approaches]
