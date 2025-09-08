@@ -4,7 +4,7 @@
     "href": "index.html",
     "title": "MUSA 5080 Portfolio",
     "section": "",
-    "text": "This portfolio documents my learning journey in Public Policy Analytics (MUSA 5080).\n\n\nAdvanced spatial analysis and data science for urban planning and public policy.\n\n\n\n\nWeekly Notes: My learning reflections and key concepts\nLabs: Completed assignments and analyses\nFinal Project: Capstone modeling challenge\n\n\n\n\nI’m a MUSA student and my background is GIS. I’ve learned a lot about Arcgis and Webgis, but I’m not good at R.\n\n\n\n\nEmail: [zcxiang@upenn.edu]\nGitHub: [@XZC-debug]\n\nquarto render"
+    "text": "This portfolio documents my learning journey in Public Policy Analytics (MUSA 5080).\n\n\nAdvanced spatial analysis and data science for urban planning and public policy.\n\n\n\n\nWeekly Notes: My learning reflections and key concepts\nLabs: Completed assignments and analyses\nFinal Project: Capstone modeling challenge\n\n\n\n\nI’m a MUSA student and my background is GIS. I’ve learned a lot about Arcgis and Webgis, but I’m not good at R.\n\n\n\n\nEmail: [zcxiang@upenn.edu]\nGitHub: [@XZC-debug]"
   },
   {
     "objectID": "index.html#about-this-course",
@@ -32,6 +32,48 @@
     "href": "index.html#contact",
     "title": "MUSA 5080 Portfolio",
     "section": "",
-    "text": "Email: [zcxiang@upenn.edu]\nGitHub: [@XZC-debug]\n\nquarto render"
+    "text": "Email: [zcxiang@upenn.edu]\nGitHub: [@XZC-debug]"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html",
+    "href": "weekly-notes/week-01-notes.html",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "",
+    "text": "[List main concepts from lecture]\n[Technical skills covered] how to use GIThub quarto document structure text formating read csv -&gt;dataframe head(car,10) Essential dplyr functions data manipulation pipeline\n\nhow to use githubpages and render qmd ,make own pages"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html#key-concepts-learned",
+    "href": "weekly-notes/week-01-notes.html#key-concepts-learned",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "",
+    "text": "[List main concepts from lecture]\n[Technical skills covered] how to use GIThub quarto document structure text formating read csv -&gt;dataframe head(car,10) Essential dplyr functions data manipulation pipeline\n\nhow to use githubpages and render qmd ,make own pages"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html#coding-techniques",
+    "href": "weekly-notes/week-01-notes.html#coding-techniques",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "Coding Techniques",
+    "text": "Coding Techniques\n\n[New R functions or approaches]\n[Quarto features learned] Essential dplyr functions: select() filter() mutate() summarize() group_by()\n\nglimpse()\nselect1&lt;-select(car_data, column1,….) fun&lt;-mutate(car_data,price_k=Price/100) price_k is the new column name Price/100 how to get new column fun &lt;- rename(fun,Price=Bob) Price is new name, Bob is old name case1&lt;-case_when(age&gt;20~“old”, TRUE~“not old”))"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html#questions-challenges",
+    "href": "weekly-notes/week-01-notes.html#questions-challenges",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "Questions & Challenges",
+    "text": "Questions & Challenges\n\n[What I didn’t fully understand]\n[Areas needing more practice]"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html#connections-to-policy",
+    "href": "weekly-notes/week-01-notes.html#connections-to-policy",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "Connections to Policy",
+    "text": "Connections to Policy\n\n[How this week’s content applies to real policy work]"
+  },
+  {
+    "objectID": "weekly-notes/week-01-notes.html#reflection",
+    "href": "weekly-notes/week-01-notes.html#reflection",
+    "title": "Week 1 Notes - Course Introduction",
+    "section": "Reflection",
+    "text": "Reflection\n\n[What was most interesting]\n[How I’ll apply this knowledge]"
   }
 ]
