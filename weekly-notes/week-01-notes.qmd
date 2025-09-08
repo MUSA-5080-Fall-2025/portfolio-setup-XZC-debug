@@ -14,6 +14,8 @@ head(car,10)
 Essential dplyr functions
 data manipulation pipeline
 
+how to use githubpages and render qmd ,make own pages
+
 ## Coding Techniques
 - [New R functions or approaches]
 - [Quarto features learned]
