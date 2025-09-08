@@ -9,10 +9,19 @@ date: "2025-09-08"
 how to use GIThub
 quarto document structure
 text formating
+read csv ->dataframe
+head(car,10)
+Essential dplyr functions
 
 ## Coding Techniques
 - [New R functions or approaches]
 - [Quarto features learned]
+Essential dplyr functions:
+  select()
+  filter()
+  mutate()
+  summarize()
+  group_by()
 
 ## Questions & Challenges
 - [What I didn't fully understand]
