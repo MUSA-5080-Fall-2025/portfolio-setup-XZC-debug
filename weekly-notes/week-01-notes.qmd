@@ -12,6 +12,7 @@ text formating
 read csv ->dataframe
 head(car,10)
 Essential dplyr functions
+data manipulation pipeline
 
 ## Coding Techniques
 - [New R functions or approaches]
