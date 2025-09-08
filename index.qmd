@@ -15,8 +15,8 @@ Advanced spatial analysis and data science for urban planning and public policy.
 - **Final Project:** Capstone modeling challenge
 
 ## About Me
-[Students will customize this section]
+I'm a MUSA student and my background is GIS. I've learned a lot about Arcgis and Webgis, but I'm not good at R.
 
 ## Contact
-- Email: [your.email@upenn.edu]
-- GitHub: [@your-username]
+- Email: [zcxiang@upenn.edu]
+- GitHub: [@XZC-debug]
