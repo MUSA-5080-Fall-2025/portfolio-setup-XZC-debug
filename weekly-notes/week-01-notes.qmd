@@ -23,6 +23,11 @@ Essential dplyr functions:
   summarize()
   group_by()
 
+glimpse()
+
+select(car_data, column1,....)
+mutate(car_data,price_k=Price/100)   price_k is the new column name   Price/100 how to get new column
+
 ## Questions & Challenges
 - [What I didn't fully understand]
 - [Areas needing more practice]
