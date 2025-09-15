@@ -1,0 +1,56 @@
+---
+title: "Week 1 Notes - Course Introduction"
+date: "2025-09-08"
+---
+
+## Key Concepts Learned
+- [List main concepts from lecture]
+- [Technical skills covered]
+quiz 3 questions
+pull commit push
+lab0 code
+how to use fuctions to analysis data
+algorithmic decision making in goverment
+ system used to assist or replace human decision-makers
+  inputs
+  outputs
+real- world examples
+clarifying key terms
+  data science
+  data analytics
+  machinelearning
+  ai
+public sector context
+  long history of government data collection
+why government uses algorithms
+  governments have limited budgets and need to serve everyone
+remember:data analytics is subjective
+health bias
+criminal justice algorithm bias
+dutch
+
+census data foundation
+
+census vs acs
+
+two types of data
+
+how to use acs data in r
+
+## Coding Techniques
+- [New R functions or approaches]
+- [Quarto features learned]
+
+
+
+
+## Questions & Challenges
+- [What I didn't fully understand]
+- [Areas needing more practice]
+
+## Connections to Policy
+- [How this week's content applies to real policy work]
+
+## Reflection
+- [What was most interesting]
+- [How I'll apply this knowledge]
