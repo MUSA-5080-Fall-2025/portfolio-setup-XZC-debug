@@ -1,0 +1,211 @@
+---
+title: "Lab 0: Getting Started with dplyr"
+subtitle: "Your First Data Analysis"
+author: "Your Name Here"
+date: today
+format: 
+  html:
+    code-fold: false
+    toc: true
+    toc-location: left
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+# Overview
+
+Welcome to your first lab! In this (not graded) assignment, you'll practice the fundamental dplyr operations I overviewed in class using car sales data. This lab will help you get comfortable with:
+
+- Basic data exploration
+- Column selection and manipulation  
+- Creating new variables
+- Filtering data
+- Grouping and summarizing
+
+**Instructions:** Copy this template into your portfolio repository under a `lab_0/` folder, then complete each section with your code and answers. You will write the code under the comment section in each chunk.
+Be sure to also copy the data folder into your `lab_0` folder.
+
+# Setup
+
+```{r setup}
+# Load the tidyverse library
+library(tidyverse)
+
+# Read in the car sales data
+# Make sure the data file is in your lab_0/data/ folder
+car_data <- read_csv("data/car_sales_data.csv")
+```
+
+# Exercise 1: Getting to Know Your Data
+
+## 1.1 Data Structure Exploration
+
+Explore the structure of your data and answer these questions:
+
+```{r explore-structure}
+# Use glimpse() to see the data structure
+
+
+# Check the column names
+
+
+# Look at the first few rows
+head(car_data)
+```
+
+**Questions to answer:**
+- How many rows and columns does the dataset have?
+- What types of variables do you see (numeric, character, etc.)?
+- Are there any column names that might cause problems? Why?
+
+**Your answers:**
+- Rows: [YOUR ANSWER]
+- Columns: [YOUR ANSWER]  
+- Variable types: [YOUR ANSWER]
+- Problematic names: [YOUR ANSWER]
+
+## 1.2 Tibble vs Data Frame
+
+Compare how tibbles and data frames display:
+
+```{r tibble-vs-dataframe}
+# Look at the tibble version (what we have)
+car_data
+
+# Convert to regular data frame and display
+car_df <- as.data.frame(car_data)
+car_df
+```
+
+**Question:** What differences do you notice in how they print?
+
+**Your answer:** [YOUR ANSWER]
+
+# Exercise 2: Basic Column Operations
+
+## 2.1 Selecting Columns
+
+Practice selecting different combinations of columns:
+
+```{r column-selection}
+# Select just Model and Mileage columns
+
+
+# Select Manufacturer, Price, and Fuel type
+
+
+# Challenge: Select all columns EXCEPT Engine Size
+
+```
+
+## 2.2 Renaming Columns
+
+Let's fix a problematic column name:
+
+```{r rename-columns}
+# Rename 'Year of manufacture' to year
+
+
+# Check that it worked
+names(car_data)
+```
+
+**Question:** Why did we need backticks around `Year of manufacture` but not around `year`?
+
+**Your answer:** [YOUR ANSWER]
+
+# Exercise 3: Creating New Columns
+
+## 3.1 Calculate Car Age
+
+```{r calculate-age}
+# Create an 'age' column (2025 minus year of manufacture)
+
+
+# Create a mileage_per_year column  
+
+
+# Look at your new columns
+#select(car_data, Model, year, age, Mileage, mileage_per_year)
+```
+
+## 3.2 Categorize Cars
+
+```{r categorize-cars}
+# Create a price_category column where if price is < 15000, its is coded as budget, between 15000 and 30000 is midrange and greater than 30000 is mid-range (use case_when)
+
+
+# Check your categories select the new column and show it
+```
+
+# Exercise 4: Filtering Practice
+
+## 4.1 Basic Filtering
+
+```{r basic-filtering}
+# Find all Toyota cars
+
+
+# Find cars with mileage less than 30,000
+
+
+# Find luxury cars (from price category) with low mileage
+
+```
+
+## 4.2 Multiple Conditions
+
+```{r multiple-conditions}
+# Find cars that are EITHER Honda OR Nissan
+
+
+# Find cars with price between $20,000 and $35,000
+
+
+# Find diesel cars less than 10 years old
+
+```
+
+**Question:** How many diesel cars are less than 10 years old?
+
+**Your answer:** [YOUR ANSWER]
+
+# Exercise 5: Grouping and Summarizing
+
+## 5.1 Basic Summaries
+
+```{r basic-summaries}
+# Calculate average price by manufacturer
+avg_price_by_brand <- car_data %>%
+  group_by(Manufacturer) %>%
+  summarize(avg_price = mean(Price, na.rm = TRUE))
+
+avg_price_by_brand
+
+# Calculate average mileage by fuel type
+
+
+# Count cars by manufacturer
+
+```
+
+## 5.2 Categorical Summaries
+
+```{r categorical-summaries}
+# Frequency table for price categories
+
+```
+
+
+# Submission Notes
+
+**To submit this lab:**
+1. Make sure your code runs without errors
+2. Fill in all the "[YOUR ANSWER]" sections and complete all of the empty code! 
+3. Save this file in your portfolio's `lab_0/` folder
+4. Commit and push to GitHub
+5. Check that it appears on your GitHub Pages portfolio site
+
+**Questions?** Post on the canvas discussion board or come to office hours!
