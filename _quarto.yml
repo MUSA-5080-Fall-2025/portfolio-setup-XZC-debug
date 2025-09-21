@@ -10,6 +10,10 @@ website:
         text: Home
       - href: weekly-notes/week-01-notes.html
         text: Weekly Notes
+      - text: Assignments
+        menu:
+          - href: assignments/assignment_1/census_quality.qmd
+            text: "Assignment 1: Census Data Exploration"  
 
 format:
   html:
