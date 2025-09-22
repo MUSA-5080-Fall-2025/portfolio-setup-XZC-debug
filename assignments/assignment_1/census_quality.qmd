@@ -2,7 +2,7 @@
 title: "Assignment 1: Census Data Quality for Policy Decisions"
 subtitle: "Evaluating Data Reliability for Algorithmic Decision-Making"
 author: "Zicheng Xiang"
-date: 9.21
+date: "9.21"
 format: 
   html:
     code-fold: false
@@ -25,8 +25,11 @@ library(knitr)
 census_api_key("c45ccb372bc48b576b618d3e5e3f1351d741c281", install = TRUE)
 
 my_state <- "Pennsylvania"
-
-# County-Level Resource Assessment
+```
+Question: Why are we using ACS 5-year estimates here instead of 1-year?
+Your answer: [YOUR ANSWER]
+```{r}
+# 1.County-Level Resource Assessment
   # Data Retrieval
 county_data <- get_acs(
   geography = "county",
@@ -37,10 +40,24 @@ county_data <- get_acs(
   survey = "acs5",
   output = "wide"
 ) %>%
+  # Clean county names: remove " County, ST"
   mutate(NAME = str_remove(NAME, " County,.*"))
 
+  # Peek at the data
 head(county_data)
+```
+Questions to answer:
 
+How many counties were returned for your state?
+
+What does the E and M suffix mean in median_incomeE and median_incomeM?
+
+Your answers:
+
+Number of counties: [YOUR ANSWER]
+
+E vs M: [YOUR ANSWER]
+```{r}
   # Data Quality Assessment
 county_quality <- county_data %>%
   mutate(
@@ -58,7 +75,10 @@ reliability_summary <- county_quality %>%
   mutate(percent = round(n / sum(n) * 100, 1))
 
 reliability_summary
-
+```
+Question: What proportion of counties fall into Low Confidence?
+Your answer: [YOUR ANSWER]
+```{r}
   # High Uncertainty Counties
 top5_uncertainty <- county_quality %>%
   arrange(desc(moe_pct)) %>%
@@ -72,7 +92,10 @@ top5_uncertainty <- county_quality %>%
   )
 
 kable(top5_uncertainty, caption = "Top 5 Counties by Median Income MOE% (Highest First)")
-
+```
+Short commentary (2–3 sentences):
+[Write what these results imply for algorithmic decisions. E.g., "Counties with higher MOE% may be mis-ranked if we sort by income alone, which could misdirect funding."]
+```{r}
 # Neighborhood-Level Analysis
   # Select Focus Counties
 focus_counties <- c("Philadelphia", "Allegheny", "SomeCounty")  # <-- change these
@@ -82,7 +105,10 @@ selected_counties <- county_quality %>%
   select(NAME, median_incomeE, moe_pct, reliability)
 
 selected_counties
-
+```
+Question: Why did you pick these counties?
+Your answer: [YOUR ANSWER]
+```{r}
   # Tract-Level Demographics
 race_vars <- c(
   total    = "B03002_001",
@@ -128,8 +154,11 @@ county_avg_demo <- tract_data %>%
   )
 
 kable(county_avg_demo, caption = "Average Tract Demographics by County")
-
-# Comprehensive Data Quality Evaluation
+```
+Question: Which county shows the highest average pct_hispanic?
+Your answer: [YOUR ANSWER]
+```{r}
+# 3.Comprehensive Data Quality Evaluation
   # MOE% for Demographics
 tract_quality <- tract_data %>%
   mutate(
@@ -138,7 +167,10 @@ tract_quality <- tract_data %>%
     moe_hispanic_pct = (hispanicM / hispanicE) * 100,
     high_moe_any = (moe_white_pct > 15) | (moe_black_pct > 15) | (moe_hispanic_pct > 15)
   )
-
+```
+Question: Roughly what share of tracts have any demographic MOE% > 15?
+Your answer: [YOUR ANSWER]
+```{r}
 # How many tracts have any high MOE?
 tract_quality %>% count(high_moe_any)
 
@@ -154,8 +186,11 @@ moe_pattern <- tract_quality %>%
   )
 
 kable(moe_pattern, caption = "Comparison of Tracts by High-MOE Flag")
-
-# Policy Recommendations
+```
+Short commentary (2–3 sentences):
+[Describe any pattern you see. For example, "Smaller-population tracts tend to have higher MOE."]
+```{r}
+# 4.Policy Recommendations
   # Decision Framework Table
 decision_table <- county_quality %>%
   select(county = NAME, median_incomeE, moe_pct, reliability) %>%
@@ -166,8 +201,15 @@ decision_table <- county_quality %>%
       reliability == "Low Confidence"      ~ "Requires manual review or additional data"
     )
   )
-
+```
 kable(decision_table, caption = "County-Level Decision Framework")
 
+Follow-up lists (bulleted is fine):
+
+Immediate algorithm use (High): [YOUR ANSWER]
+
+Needs monitoring (Moderate): [YOUR ANSWER]
+
+Alt approach / manual review (Low): [YOUR ANSWER]
 
 
