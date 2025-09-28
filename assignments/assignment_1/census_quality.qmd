@@ -22,12 +22,12 @@ library(tidycensus)
 library(tidyverse)
 library(knitr)
 
-census_api_key("c45ccb372bc48b576b618d3e5e3f1351d741c281", install = TRUE)
+#census_api_key("c45ccb372bc48b576b618d3e5e3f1351d741c281", install = TRUE)
 
 my_state <- "Pennsylvania"
 ```
 Question: Why are we using ACS 5-year estimates here instead of 1-year?
-Your answer: [YOUR ANSWER]
+Your answer: [We use ACS 5-year estimates instead of 1-year estimates because they are available for all geographic areas, including small counties and census tracts, and they provide more reliable statistics by combining five years of data. In contrast, 1-year estimates are only published for areas with populations of 65,000 or more and have higher margins of error.]
 ```{r}
 # 1.County-Level Resource Assessment
   # Data Retrieval
@@ -44,6 +44,8 @@ county_data <- get_acs(
   mutate(NAME = str_remove(NAME, " County,.*"))
 
   # Peek at the data
+nrow(county_data)
+
 head(county_data)
 ```
 Questions to answer:
@@ -54,9 +56,9 @@ What does the E and M suffix mean in median_incomeE and median_incomeM?
 
 Your answers:
 
-Number of counties: [YOUR ANSWER]
+Number of counties: [67]
 
-E vs M: [YOUR ANSWER]
+E vs M: [In ACS data, the suffix E stands for the estimate, and M stands for the margin of error associated with that estimate.]
 ```{r}
   # Data Quality Assessment
 county_quality <- county_data %>%
@@ -77,7 +79,7 @@ reliability_summary <- county_quality %>%
 reliability_summary
 ```
 Question: What proportion of counties fall into Low Confidence?
-Your answer: [YOUR ANSWER]
+Your answer: [0%]
 ```{r}
   # High Uncertainty Counties
 top5_uncertainty <- county_quality %>%
@@ -94,11 +96,11 @@ top5_uncertainty <- county_quality %>%
 kable(top5_uncertainty, caption = "Top 5 Counties by Median Income MOE% (Highest First)")
 ```
 Short commentary (2–3 sentences):
-[Write what these results imply for algorithmic decisions. E.g., "Counties with higher MOE% may be mis-ranked if we sort by income alone, which could misdirect funding."]
+[Counties with the highest margins of error in median income estimates are more uncertain, and their rankings may shift substantially if true values differ from the estimates. If an algorithm sorts or allocates resources based only on the reported income, these counties could be misclassified, leading to potential misallocation of funding or support. This highlights the importance of incorporating data reliability into policy decisions.]
 ```{r}
 # Neighborhood-Level Analysis
   # Select Focus Counties
-focus_counties <- c("Philadelphia", "Allegheny", "SomeCounty")  # <-- change these
+focus_counties <- c("Chester", "Bucks", "Montgomery", "Delaware", "Lancaster", "SomeCounty")  
 
 selected_counties <- county_quality %>%
   filter(NAME %in% focus_counties) %>%
@@ -107,7 +109,7 @@ selected_counties <- county_quality %>%
 selected_counties
 ```
 Question: Why did you pick these counties?
-Your answer: [YOUR ANSWER]
+Your answer: [I picked these counties because, according to publicly available data, they have the highest median household incomes in Pennsylvania, which makes them the strongest economically.]
 ```{r}
   # Tract-Level Demographics
 race_vars <- c(
@@ -156,7 +158,7 @@ county_avg_demo <- tract_data %>%
 kable(county_avg_demo, caption = "Average Tract Demographics by County")
 ```
 Question: Which county shows the highest average pct_hispanic?
-Your answer: [YOUR ANSWER]
+Your answer: [Delaware County shows the highest average pct_hispanic among the selected counties.]
 ```{r}
 # 3.Comprehensive Data Quality Evaluation
   # MOE% for Demographics
@@ -167,6 +169,16 @@ tract_quality <- tract_data %>%
     moe_hispanic_pct = (hispanicM / hispanicE) * 100,
     high_moe_any = (moe_white_pct > 15) | (moe_black_pct > 15) | (moe_hispanic_pct > 15)
   )
+# 计算 share
+share_high_moe <- tract_quality %>%
+  summarise(
+    total_tracts = n(),
+    high_moe     = sum(high_moe_any, na.rm = TRUE),
+    share        = round(high_moe / total_tracts * 100, 1)
+  )
+
+share_high_moe
+
 ```
 Question: Roughly what share of tracts have any demographic MOE% > 15?
 Your answer: [YOUR ANSWER]
@@ -188,7 +200,7 @@ moe_pattern <- tract_quality %>%
 kable(moe_pattern, caption = "Comparison of Tracts by High-MOE Flag")
 ```
 Short commentary (2–3 sentences):
-[Describe any pattern you see. For example, "Smaller-population tracts tend to have higher MOE."]
+[Smaller-population tracts are more likely to have high MOE. These tracts also tend to show greater racial and ethnic diversity.]
 ```{r}
 # 4.Policy Recommendations
   # Decision Framework Table
