@@ -8,8 +8,14 @@ website:
     left:
       - href: index.qmd
         text: Home
-      - href: weekly-notes/week-01-notes.html
-        text: Weekly Notes
+      - text: Weekly Notes
+        menu:
+          - href: weekly-notes/week-01-notes.html
+            text: Weekly Notes 1
+          - href: weekly-notes/week-02-notes.html
+            text: Weekly Notes 2
+          - href: weekly-notes/week-03-notes.html
+            text: Weekly Notes 3
       - text: Assignments
         menu:
           - href: assignments/assignment_1/census_quality.qmd

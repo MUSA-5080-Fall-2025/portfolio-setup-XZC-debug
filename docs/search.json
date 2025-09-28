@@ -86,42 +86,42 @@
   {
     "objectID": "weekly-notes/week-02-notes.html",
     "href": "weekly-notes/week-02-notes.html",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "",
     "text": "[List main concepts from lecture]\n[Technical skills covered] quiz 3 questions pull commit push lab0 code how to use fuctions to analysis data algorithmic decision making in goverment system used to assist or replace human decision-makers inputs outputs real- world examples clarifying key terms data science data analytics machinelearning ai public sector context long history of government data collection why government uses algorithms governments have limited budgets and need to serve everyone remember:data analytics is subjective health bias criminal justice algorithm bias dutch\n\ncensus data foundation\ncensus vs acs\ntwo types of data\nhow to use acs data in r"
   },
   {
     "objectID": "weekly-notes/week-02-notes.html#key-concepts-learned",
     "href": "weekly-notes/week-02-notes.html#key-concepts-learned",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "",
     "text": "[List main concepts from lecture]\n[Technical skills covered] quiz 3 questions pull commit push lab0 code how to use fuctions to analysis data algorithmic decision making in goverment system used to assist or replace human decision-makers inputs outputs real- world examples clarifying key terms data science data analytics machinelearning ai public sector context long history of government data collection why government uses algorithms governments have limited budgets and need to serve everyone remember:data analytics is subjective health bias criminal justice algorithm bias dutch\n\ncensus data foundation\ncensus vs acs\ntwo types of data\nhow to use acs data in r"
   },
   {
     "objectID": "weekly-notes/week-02-notes.html#coding-techniques",
     "href": "weekly-notes/week-02-notes.html#coding-techniques",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "Coding Techniques",
     "text": "Coding Techniques\n\n[New R functions or approaches]\n[Quarto features learned]"
   },
   {
     "objectID": "weekly-notes/week-02-notes.html#questions-challenges",
     "href": "weekly-notes/week-02-notes.html#questions-challenges",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "Questions & Challenges",
     "text": "Questions & Challenges\n\n[What I didn’t fully understand]\n[Areas needing more practice]"
   },
   {
     "objectID": "weekly-notes/week-02-notes.html#connections-to-policy",
     "href": "weekly-notes/week-02-notes.html#connections-to-policy",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "Connections to Policy",
     "text": "Connections to Policy\n\n[How this week’s content applies to real policy work]"
   },
   {
     "objectID": "weekly-notes/week-02-notes.html#reflection",
     "href": "weekly-notes/week-02-notes.html#reflection",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 2 Notes - Course Introduction",
     "section": "Reflection",
     "text": "Reflection\n\n[What was most interesting]\n[How I’ll apply this knowledge]"
   },
@@ -401,42 +401,42 @@
   {
     "objectID": "weekly-notes/week-03-notes.html",
     "href": "weekly-notes/week-03-notes.html",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "",
     "text": "[List main concepts from lecture]\n[Technical skills covered] quiz 3 questions algorithmic decision making rely on proxy because some data is difficult to collet CENSUS counts everyone,ACS has margins of error decision making appealing to government because convenient anscommbe’s quartet bad visualilzation have real consequences ggplot2 philosophy\n\nfind median age\nleft join and right join"
   },
   {
     "objectID": "weekly-notes/week-03-notes.html#key-concepts-learned",
     "href": "weekly-notes/week-03-notes.html#key-concepts-learned",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "",
     "text": "[List main concepts from lecture]\n[Technical skills covered] quiz 3 questions algorithmic decision making rely on proxy because some data is difficult to collet CENSUS counts everyone,ACS has margins of error decision making appealing to government because convenient anscommbe’s quartet bad visualilzation have real consequences ggplot2 philosophy\n\nfind median age\nleft join and right join"
   },
   {
     "objectID": "weekly-notes/week-03-notes.html#coding-techniques",
     "href": "weekly-notes/week-03-notes.html#coding-techniques",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "Coding Techniques",
     "text": "Coding Techniques\n\n[New R functions or approaches]\n[Quarto features learned] g&lt;-ggplot(data=gcs_data)+aes(x=income,y=%bach ,color=%happy)+geom_points(decorate colors,sizes)+x_xaxis\n\ng &lt;- ggplot(data = gcs_data) + aes(x = income, y = %bach, color = %happy) + geom_point(size = 3) + xlab(“Income”) + ylab(“Bachelor %”) + labs(color = “Happiness %”)\nfill:area fill color alpha:transparent"
   },
   {
     "objectID": "weekly-notes/week-03-notes.html#questions-challenges",
     "href": "weekly-notes/week-03-notes.html#questions-challenges",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "Questions & Challenges",
     "text": "Questions & Challenges\n\n[What I didn’t fully understand]\n[Areas needing more practice]"
   },
   {
     "objectID": "weekly-notes/week-03-notes.html#connections-to-policy",
     "href": "weekly-notes/week-03-notes.html#connections-to-policy",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "Connections to Policy",
     "text": "Connections to Policy\n\n[How this week’s content applies to real policy work]"
   },
   {
     "objectID": "weekly-notes/week-03-notes.html#reflection",
     "href": "weekly-notes/week-03-notes.html#reflection",
-    "title": "Week 1 Notes - Course Introduction",
+    "title": "Week 3 Notes - Course Introduction",
     "section": "Reflection",
     "text": "Reflection\n\n[What was most interesting]\n[How I’ll apply this knowledge]"
   }
