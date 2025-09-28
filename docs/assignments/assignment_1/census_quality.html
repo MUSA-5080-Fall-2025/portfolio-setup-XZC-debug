@@ -163,6 +163,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
    
   <ul>
   <li><a href="#setup" id="toc-setup" class="nav-link active" data-scroll-target="#setup">Setup</a></li>
+  <li><a href="#county_level_resource_assessment" id="toc-county_level_resource_assessment" class="nav-link" data-scroll-target="#county_level_resource_assessment">1.County_Level_Resource_Assessment</a></li>
+  <li><a href="#neighborhood_level_analysis" id="toc-neighborhood_level_analysis" class="nav-link" data-scroll-target="#neighborhood_level_analysis">2.Neighborhood_Level_Analysis</a></li>
+  <li><a href="#comprehensive_data_quality_evaluation" id="toc-comprehensive_data_quality_evaluation" class="nav-link" data-scroll-target="#comprehensive_data_quality_evaluation">3.Comprehensive_Data_Quality_Evaluation</a></li>
+  <li><a href="#policy-recommendations" id="toc-policy-recommendations" class="nav-link" data-scroll-target="#policy-recommendations">4.Policy Recommendations</a></li>
   </ul>
 </nav>
 </nav>
@@ -218,6 +222,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>my_state <span class="ot">&lt;-</span> <span class="st">"Pennsylvania"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>Question: Why are we using ACS 5-year estimates here instead of 1-year? Your answer: [We use ACS 5-year estimates instead of 1-year estimates because they are available for all geographic areas, including small counties and census tracts, and they provide more reliable statistics by combining five years of data. In contrast, 1-year estimates are only published for areas with populations of 65,000 or more and have higher margins of error.]</p>
+</section>
+<section id="county_level_resource_assessment" class="level1">
+<h1>1.County_Level_Resource_Assessment</h1>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1.County-Level Resource Assessment</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Data Retrieval</span></span>
@@ -351,6 +358,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 <p>Short commentary (2–3 sentences): [Counties with the highest margins of error in median income estimates are more uncertain, and their rankings may shift substantially if true values differ from the estimates. If an algorithm sorts or allocates resources based only on the reported income, these counties could be misclassified, leading to potential misallocation of funding or support. This highlights the importance of incorporating data reliability into policy decisions.]</p>
+</section>
+<section id="neighborhood_level_analysis" class="level1">
+<h1>2.Neighborhood_Level_Analysis</h1>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Neighborhood-Level Analysis</span></span>
 <span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Select Focus Counties</span></span>
@@ -5765,7 +5775,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </table>
 </div>
 </div>
-<p>Question: Which county shows the highest average pct_hispanic? Your answer: [YOUR ANSWER]</p>
+<p>Question: Which county shows the highest average pct_hispanic? Your answer: [Delaware County shows the highest average pct_hispanic among the selected counties.]</p>
+</section>
+<section id="comprehensive_data_quality_evaluation" class="level1">
+<h1>3.Comprehensive_Data_Quality_Evaluation</h1>
 <div class="cell">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 3.Comprehensive Data Quality Evaluation</span></span>
 <span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># MOE% for Demographics</span></span>
@@ -5775,30 +5788,45 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">moe_black_pct    =</span> (blackM    <span class="sc">/</span> blackE)    <span class="sc">*</span> <span class="dv">100</span>,</span>
 <span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">moe_hispanic_pct =</span> (hispanicM <span class="sc">/</span> hispanicE) <span class="sc">*</span> <span class="dv">100</span>,</span>
 <span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">high_moe_any =</span> (moe_white_pct <span class="sc">&gt;</span> <span class="dv">15</span>) <span class="sc">|</span> (moe_black_pct <span class="sc">&gt;</span> <span class="dv">15</span>) <span class="sc">|</span> (moe_hispanic_pct <span class="sc">&gt;</span> <span class="dv">15</span>)</span>
-<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 计算 share</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>share_high_moe <span class="ot">&lt;-</span> tract_quality <span class="sc">%&gt;%</span></span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">total_tracts =</span> <span class="fu">n</span>(),</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">high_moe     =</span> <span class="fu">sum</span>(high_moe_any, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">share        =</span> <span class="fu">round</span>(high_moe <span class="sc">/</span> total_tracts <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>)</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a>share_high_moe</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 3
+  total_tracts high_moe share
+         &lt;int&gt;    &lt;int&gt; &lt;dbl&gt;
+1          758      758   100</code></pre>
 </div>
-<p>Question: Roughly what share of tracts have any demographic MOE% &gt; 15? Your answer: [YOUR ANSWER]</p>
+</div>
+<p>Question: Roughly what share of tracts have any demographic MOE% &gt; 15? Your answer: [Roughly 100% of tracts have at least one demographic MOE% greater than 15]</p>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># How many tracts have any high MOE?</span></span>
-<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>tract_quality <span class="sc">%&gt;%</span> <span class="fu">count</span>(high_moe_any)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="co"># How many tracts have any high MOE?</span></span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>tract_quality <span class="sc">%&gt;%</span> <span class="fu">count</span>(high_moe_any)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code># A tibble: 1 × 2
   high_moe_any     n
   &lt;lgl&gt;        &lt;int&gt;
 1 TRUE           758</code></pre>
 </div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Pattern Check</span></span>
-<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>moe_pattern <span class="ot">&lt;-</span> tract_quality <span class="sc">%&gt;%</span></span>
-<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(high_moe_any) <span class="sc">%&gt;%</span></span>
-<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
-<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_pop      =</span> <span class="fu">mean</span>(totalE, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_white    =</span> <span class="fu">mean</span>(pct_white, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_black    =</span> <span class="fu">mean</span>(pct_black, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_hispanic =</span> <span class="fu">mean</span>(pct_hispanic, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">n =</span> <span class="fu">n</span>()</span>
-<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(moe_pattern, <span class="at">caption =</span> <span class="st">"Comparison of Tracts by High-MOE Flag"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Pattern Check</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>moe_pattern <span class="ot">&lt;-</span> tract_quality <span class="sc">%&gt;%</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(high_moe_any) <span class="sc">%&gt;%</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_pop      =</span> <span class="fu">mean</span>(totalE, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_white    =</span> <span class="fu">mean</span>(pct_white, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_black    =</span> <span class="fu">mean</span>(pct_black, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_hispanic =</span> <span class="fu">mean</span>(pct_hispanic, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">n =</span> <span class="fu">n</span>()</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(moe_pattern, <span class="at">caption =</span> <span class="st">"Comparison of Tracts by High-MOE Flag"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
 <caption>Comparison of Tracts by High-MOE Flag</caption>
@@ -5825,25 +5853,520 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </table>
 </div>
 </div>
-<p>Short commentary (2–3 sentences): [Describe any pattern you see. For example, “Smaller-population tracts tend to have higher MOE.”]</p>
+<p>Short commentary (2–3 sentences): [Smaller-population tracts are more likely to have high MOE. These tracts also tend to show greater racial and ethnic diversity.]</p>
+</section>
+<section id="policy-recommendations" class="level1">
+<h1>4.Policy Recommendations</h1>
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 4.Policy Recommendations</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Decision Framework Table</span></span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>decision_table <span class="ot">&lt;-</span> county_quality <span class="sc">%&gt;%</span></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">county =</span> NAME, median_incomeE, moe_pct, reliability) <span class="sc">%&gt;%</span></span>
-<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">recommendation =</span> <span class="fu">case_when</span>(</span>
-<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"High Confidence"</span>     <span class="sc">~</span> <span class="st">"Safe for algorithmic decisions"</span>,</span>
-<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"Moderate Confidence"</span> <span class="sc">~</span> <span class="st">"Use with caution - monitor outcomes"</span>,</span>
-<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"Low Confidence"</span>      <span class="sc">~</span> <span class="st">"Requires manual review or additional data"</span></span>
-<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 4.Policy Recommendations</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Decision Framework Table</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>decision_table <span class="ot">&lt;-</span> county_quality <span class="sc">%&gt;%</span></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">county =</span> NAME, median_incomeE, moe_pct, reliability) <span class="sc">%&gt;%</span></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">recommendation =</span> <span class="fu">case_when</span>(</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"High Confidence"</span>     <span class="sc">~</span> <span class="st">"Safe for algorithmic decisions"</span>,</span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"Moderate Confidence"</span> <span class="sc">~</span> <span class="st">"Use with caution - monitor outcomes"</span>,</span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>      reliability <span class="sc">==</span> <span class="st">"Low Confidence"</span>      <span class="sc">~</span> <span class="st">"Requires manual review or additional data"</span></span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb21-12"><a href="#cb21-12" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(decision_table, <span class="at">caption =</span> <span class="st">"County-Level Decision Framework"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<table class="caption-top table table-sm table-striped small">
+<caption>County-Level Decision Framework</caption>
+<colgroup>
+<col style="width: 15%">
+<col style="width: 15%">
+<col style="width: 9%">
+<col style="width: 21%">
+<col style="width: 37%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">county</th>
+<th style="text-align: right;">median_incomeE</th>
+<th style="text-align: right;">moe_pct</th>
+<th style="text-align: left;">reliability</th>
+<th style="text-align: left;">recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Adams</td>
+<td style="text-align: right;">78975</td>
+<td style="text-align: right;">4.221589</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Allegheny</td>
+<td style="text-align: right;">72537</td>
+<td style="text-align: right;">1.198009</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Armstrong</td>
+<td style="text-align: right;">61011</td>
+<td style="text-align: right;">3.609185</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Beaver</td>
+<td style="text-align: right;">67194</td>
+<td style="text-align: right;">2.278477</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Bedford</td>
+<td style="text-align: right;">58337</td>
+<td style="text-align: right;">4.467148</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Berks</td>
+<td style="text-align: right;">74617</td>
+<td style="text-align: right;">1.596151</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Blair</td>
+<td style="text-align: right;">59386</td>
+<td style="text-align: right;">3.465463</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Bradford</td>
+<td style="text-align: right;">60650</td>
+<td style="text-align: right;">3.572960</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Bucks</td>
+<td style="text-align: right;">107826</td>
+<td style="text-align: right;">1.405969</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Butler</td>
+<td style="text-align: right;">82932</td>
+<td style="text-align: right;">2.609367</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Cambria</td>
+<td style="text-align: right;">54221</td>
+<td style="text-align: right;">3.336346</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Cameron</td>
+<td style="text-align: right;">46186</td>
+<td style="text-align: right;">5.640237</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Carbon</td>
+<td style="text-align: right;">64538</td>
+<td style="text-align: right;">5.305402</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Centre</td>
+<td style="text-align: right;">70087</td>
+<td style="text-align: right;">2.769415</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Chester</td>
+<td style="text-align: right;">118574</td>
+<td style="text-align: right;">1.704421</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Clarion</td>
+<td style="text-align: right;">58690</td>
+<td style="text-align: right;">4.365309</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Clearfield</td>
+<td style="text-align: right;">56982</td>
+<td style="text-align: right;">2.792110</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Clinton</td>
+<td style="text-align: right;">59011</td>
+<td style="text-align: right;">3.855213</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Columbia</td>
+<td style="text-align: right;">59457</td>
+<td style="text-align: right;">3.757337</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Crawford</td>
+<td style="text-align: right;">58734</td>
+<td style="text-align: right;">3.912555</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Cumberland</td>
+<td style="text-align: right;">82849</td>
+<td style="text-align: right;">2.199182</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Dauphin</td>
+<td style="text-align: right;">71046</td>
+<td style="text-align: right;">2.271768</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Delaware</td>
+<td style="text-align: right;">86390</td>
+<td style="text-align: right;">1.534900</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Elk</td>
+<td style="text-align: right;">61672</td>
+<td style="text-align: right;">6.633480</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Erie</td>
+<td style="text-align: right;">59396</td>
+<td style="text-align: right;">2.550677</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Fayette</td>
+<td style="text-align: right;">55579</td>
+<td style="text-align: right;">4.163443</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Forest</td>
+<td style="text-align: right;">46188</td>
+<td style="text-align: right;">9.985278</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Franklin</td>
+<td style="text-align: right;">71808</td>
+<td style="text-align: right;">2.998273</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Fulton</td>
+<td style="text-align: right;">63153</td>
+<td style="text-align: right;">3.646699</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Greene</td>
+<td style="text-align: right;">66283</td>
+<td style="text-align: right;">6.407374</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Huntingdon</td>
+<td style="text-align: right;">61300</td>
+<td style="text-align: right;">4.717781</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Indiana</td>
+<td style="text-align: right;">57170</td>
+<td style="text-align: right;">4.647542</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Jefferson</td>
+<td style="text-align: right;">56607</td>
+<td style="text-align: right;">3.413006</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Juniata</td>
+<td style="text-align: right;">61915</td>
+<td style="text-align: right;">4.785593</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lackawanna</td>
+<td style="text-align: right;">63739</td>
+<td style="text-align: right;">2.579269</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Lancaster</td>
+<td style="text-align: right;">81458</td>
+<td style="text-align: right;">1.794790</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lawrence</td>
+<td style="text-align: right;">57585</td>
+<td style="text-align: right;">3.068507</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Lebanon</td>
+<td style="text-align: right;">72532</td>
+<td style="text-align: right;">2.687090</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lehigh</td>
+<td style="text-align: right;">74973</td>
+<td style="text-align: right;">1.999386</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Luzerne</td>
+<td style="text-align: right;">60836</td>
+<td style="text-align: right;">2.350582</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Lycoming</td>
+<td style="text-align: right;">63437</td>
+<td style="text-align: right;">4.394912</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">McKean</td>
+<td style="text-align: right;">57861</td>
+<td style="text-align: right;">4.749313</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Mercer</td>
+<td style="text-align: right;">57353</td>
+<td style="text-align: right;">3.633637</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Mifflin</td>
+<td style="text-align: right;">58012</td>
+<td style="text-align: right;">3.428601</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Monroe</td>
+<td style="text-align: right;">80656</td>
+<td style="text-align: right;">3.173973</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Montgomery</td>
+<td style="text-align: right;">107441</td>
+<td style="text-align: right;">1.271395</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Montour</td>
+<td style="text-align: right;">72626</td>
+<td style="text-align: right;">7.085617</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Northampton</td>
+<td style="text-align: right;">82201</td>
+<td style="text-align: right;">1.931850</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Northumberland</td>
+<td style="text-align: right;">55952</td>
+<td style="text-align: right;">2.671933</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Perry</td>
+<td style="text-align: right;">76103</td>
+<td style="text-align: right;">3.173331</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Philadelphia</td>
+<td style="text-align: right;">57537</td>
+<td style="text-align: right;">1.376506</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Pike</td>
+<td style="text-align: right;">76416</td>
+<td style="text-align: right;">4.895572</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Potter</td>
+<td style="text-align: right;">56491</td>
+<td style="text-align: right;">4.416633</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Schuylkill</td>
+<td style="text-align: right;">63574</td>
+<td style="text-align: right;">2.401925</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Snyder</td>
+<td style="text-align: right;">65914</td>
+<td style="text-align: right;">5.561793</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Somerset</td>
+<td style="text-align: right;">57357</td>
+<td style="text-align: right;">2.775598</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Sullivan</td>
+<td style="text-align: right;">62910</td>
+<td style="text-align: right;">9.252901</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Susquehanna</td>
+<td style="text-align: right;">63968</td>
+<td style="text-align: right;">3.142196</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Tioga</td>
+<td style="text-align: right;">59707</td>
+<td style="text-align: right;">3.227427</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Union</td>
+<td style="text-align: right;">64914</td>
+<td style="text-align: right;">7.321995</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Venango</td>
+<td style="text-align: right;">59278</td>
+<td style="text-align: right;">3.448160</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Warren</td>
+<td style="text-align: right;">57925</td>
+<td style="text-align: right;">5.187743</td>
+<td style="text-align: left;">Moderate Confidence</td>
+<td style="text-align: left;">Use with caution - monitor outcomes</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Washington</td>
+<td style="text-align: right;">74403</td>
+<td style="text-align: right;">2.377592</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Wayne</td>
+<td style="text-align: right;">59240</td>
+<td style="text-align: right;">4.794058</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Westmoreland</td>
+<td style="text-align: right;">69454</td>
+<td style="text-align: right;">1.991246</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Wyoming</td>
+<td style="text-align: right;">67968</td>
+<td style="text-align: right;">3.851813</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">York</td>
+<td style="text-align: right;">79183</td>
+<td style="text-align: right;">1.788263</td>
+<td style="text-align: left;">High Confidence</td>
+<td style="text-align: left;">Safe for algorithmic decisions</td>
+</tr>
+</tbody>
+</table>
 </div>
-<p>kable(decision_table, caption = “County-Level Decision Framework”)</p>
+</div>
 <p>Follow-up lists (bulleted is fine):</p>
-<p>Immediate algorithm use (High): [YOUR ANSWER]</p>
-<p>Needs monitoring (Moderate): [YOUR ANSWER]</p>
-<p>Alt approach / manual review (Low): [YOUR ANSWER]</p>
+<p>Immediate algorithm use (High): [57 counties — about 85% of Pennsylvania counties fall into the “High Confidence” category, so their median income estimates are safe for algorithmic decisions.]</p>
+<p>Needs monitoring (Moderate): [10 counties — about 15% of counties are “Moderate Confidence” and require monitoring when used in decision-making.]</p>
+<p>Alt approach / manual review (Low): [0 counties — none fell into the “Low Confidence” category in this dataset, so no counties require manual review.]</p>
 
 
 </section>

@@ -28,7 +28,9 @@ my_state <- "Pennsylvania"
 ```
 Question: Why are we using ACS 5-year estimates here instead of 1-year?
 Your answer: [We use ACS 5-year estimates instead of 1-year estimates because they are available for all geographic areas, including small counties and census tracts, and they provide more reliable statistics by combining five years of data. In contrast, 1-year estimates are only published for areas with populations of 65,000 or more and have higher margins of error.]
-```{r}
+
+# 1.County_Level_Resource_Assessment
+```{r County_Level_Resource_Assessment}
 # 1.County-Level Resource Assessment
   # Data Retrieval
 county_data <- get_acs(
@@ -97,7 +99,9 @@ kable(top5_uncertainty, caption = "Top 5 Counties by Median Income MOE% (Highest
 ```
 Short commentary (2–3 sentences):
 [Counties with the highest margins of error in median income estimates are more uncertain, and their rankings may shift substantially if true values differ from the estimates. If an algorithm sorts or allocates resources based only on the reported income, these counties could be misclassified, leading to potential misallocation of funding or support. This highlights the importance of incorporating data reliability into policy decisions.]
-```{r}
+
+# 2.Neighborhood_Level_Analysis
+```{r Neighborhood_Level_Analysis}
 # Neighborhood-Level Analysis
   # Select Focus Counties
 focus_counties <- c("Chester", "Bucks", "Montgomery", "Delaware", "Lancaster", "SomeCounty")  
@@ -159,7 +163,9 @@ kable(county_avg_demo, caption = "Average Tract Demographics by County")
 ```
 Question: Which county shows the highest average pct_hispanic?
 Your answer: [Delaware County shows the highest average pct_hispanic among the selected counties.]
-```{r}
+
+# 3.Comprehensive_Data_Quality_Evaluation
+```{r Comprehensive_Data_Quality_Evaluation}
 # 3.Comprehensive Data Quality Evaluation
   # MOE% for Demographics
 tract_quality <- tract_data %>%
@@ -181,7 +187,7 @@ share_high_moe
 
 ```
 Question: Roughly what share of tracts have any demographic MOE% > 15?
-Your answer: [YOUR ANSWER]
+Your answer: [Roughly 100% of tracts have at least one demographic MOE% greater than 15]
 ```{r}
 # How many tracts have any high MOE?
 tract_quality %>% count(high_moe_any)
@@ -201,7 +207,9 @@ kable(moe_pattern, caption = "Comparison of Tracts by High-MOE Flag")
 ```
 Short commentary (2–3 sentences):
 [Smaller-population tracts are more likely to have high MOE. These tracts also tend to show greater racial and ethnic diversity.]
-```{r}
+
+# 4.Policy Recommendations
+```{r Policy_Recommendations}
 # 4.Policy Recommendations
   # Decision Framework Table
 decision_table <- county_quality %>%
@@ -213,15 +221,16 @@ decision_table <- county_quality %>%
       reliability == "Low Confidence"      ~ "Requires manual review or additional data"
     )
   )
-```
 kable(decision_table, caption = "County-Level Decision Framework")
+
+```
 
 Follow-up lists (bulleted is fine):
 
-Immediate algorithm use (High): [YOUR ANSWER]
+Immediate algorithm use (High): [57 counties — about 85% of Pennsylvania counties fall into the “High Confidence” category, so their median income estimates are safe for algorithmic decisions.]
 
-Needs monitoring (Moderate): [YOUR ANSWER]
+Needs monitoring (Moderate): [10 counties — about 15% of counties are “Moderate Confidence” and require monitoring when used in decision-making.]
 
-Alt approach / manual review (Low): [YOUR ANSWER]
+Alt approach / manual review (Low): [0 counties — none fell into the “Low Confidence” category in this dataset, so no counties require manual review.]
 
 
