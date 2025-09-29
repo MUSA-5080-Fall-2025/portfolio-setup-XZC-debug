@@ -23,6 +23,17 @@ If you want to set a fixed value (e.g., make all points red), you don’t use ae
 3.geom_point
 4.geom_point(alpha= 0.5)
 
+Part 1: Why Spatial Analysis Matters
+Part 2: Spatial Data Fundamentals
+Vector Data Model
+Real world → Simplified geometric representations
+
+Three basic types:
+
+Points → Locations (schools, hospitals, crime incidents)
+Lines → Linear features (roads, rivers, transit routes)
+Polygons → Areas (census tracts, neighborhoods, service areas)
+
 
 ## Coding Techniques
 - [New R functions or approaches]
