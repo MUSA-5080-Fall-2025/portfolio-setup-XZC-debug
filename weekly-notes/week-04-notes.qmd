@@ -1,0 +1,42 @@
+---
+title: "Week 4 Notes"
+date: "2025-09-08"
+---
+
+## Key Concepts Learned
+- [List main concepts from lecture]
+- [Technical skills covered]
+quiz 3 questions
+1.Anscombe's Quartet
+2.add dataset: left join right join
+3.In ggplot2, aes() is short for aesthetic mapping, which is used to specify how variables in the data are mapped to the visual properties of the plot.
+
+1.Plain explanation
+
+aes() = “link the columns in your dataset to the visual appearance of the plot.”
+
+Inside aes(), you usually put column names from your data frame, such as x, y, color, size, shape, etc.
+
+If you want to set a fixed value (e.g., make all points red), you don’t use aes(). Instead, you write it directly in geom_*().
+
+2.add a layer: +
+3.geom_point
+4.geom_point(alpha= 0.5)
+
+
+## Coding Techniques
+- [New R functions or approaches]
+- [Quarto features learned]
+g<-ggplot(data=gcs_data)+aes(x=income,y=%bach ,color=%happy)+geom_points(decorate   colors,sizes)+x_xaxis
+
+
+## Questions & Challenges
+- [What I didn't fully understand]
+- [Areas needing more practice]
+
+## Connections to Policy
+- [How this week's content applies to real policy work]
+
+## Reflection
+- [What was most interesting]
+- [How I'll apply this knowledge]
