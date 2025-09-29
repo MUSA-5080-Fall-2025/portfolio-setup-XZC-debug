@@ -34,6 +34,28 @@ Points → Locations (schools, hospitals, crime incidents)
 Lines → Linear features (roads, rivers, transit routes)
 Polygons → Areas (census tracts, neighborhoods, service areas)
 
+Part 3: Spatial Operations
+
+spatial join
+A note about that (.)
+
+Part 4: Geometry Operations
+Buffer Operations
+
+Part 5: Coordinate Reference Systems
+step 1: approximate earth's shape
+step 2: tie ellipsiod to the real earth
+ex: 1866 clarke
+step 3: write down lat/long grid
+
+st_crs(tracts)
+
+st_set_crs(tracts)
+st_set_crs(): only declares the coordinate reference system, it does not change the coordinate values.
+👉 Use this when the original data are already in latitude/longitude (or another CRS), but the CRS information is missing.
+
+st_transform(): actually performs a coordinate transformation, so the coordinate values will change.
+👉 Use this when you need to convert WGS84 latitude/longitude into a projected CRS (e.g., UTM).
 
 ## Coding Techniques
 - [New R functions or approaches]
