@@ -1,0 +1,255 @@
+---
+title: "Assignment 2: Spatial Analysis and Visualization"
+subtitle: "Healthcare Access and Equity in Pennsylvania"
+author: "Zicheng Xiang"
+date: today
+format: 
+  html:
+    code-fold: true
+    toc: true
+    toc-location: left
+    theme: cosmo
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+# Setup
+
+```{r setup}
+#| label: setup
+#| echo: true
+
+# Packages
+required_pkgs <- c(
+  "tidyverse","sf","tigris","tidycensus","units","nngeo",
+  "ggplot2","scales","janitor","glue","patchwork","osmdata"
+)
+
+for (p in required_pkgs) {
+  if (!requireNamespace(p, quietly = TRUE)) install.packages(p)
+  library(p, character.only = TRUE)
+}
+
+options(tigris_use_cache = TRUE, tigris_class = "sf")
+
+# --- PARAMETERS ---
+state_abbr <- "PA"
+state_name <- "Pennsylvania"
+
+# Use ACS 5-year for small-area reliability
+year_acs <- 2022
+survey  <- "acs5"
+
+# If your CENSUS_API_KEY is not installed, uncomment and add your key:
+# tidycensus::census_api_key("YOUR_KEY_HERE", install = TRUE, overwrite = TRUE)
+```
+
+# Data dictionary
+
+We will use the following ACS variables (5-year) for tract-level vulnerability:
+
+- `B19013_001`: Median household income (USD)
+- `B01001_020`, `B01001_021`, `B01001_044`, `B01001_045`: Population age 65+ (sex by age)
+- `B17001_001`, `B17001_002`: Poverty universe and below-poverty
+- `B25044_003`, `B25044_010`: No vehicle available (owner & renter occupied)
+- `B01003_001`: Total population
+
+# 1) Load geographies
+
+```{r geographies}
+# Counties & tracts (geometry)
+counties <- tigris::counties(state = state_abbr, year = 2023, cb = TRUE) %>%
+  st_transform(5070)  # NAD83 / Conus Albers for distance/area
+
+tracts  <- tigris::tracts(state = state_abbr, year = 2023, cb = TRUE) %>%
+  st_transform(5070)
+
+glue("Counties: {nrow(counties)}; Tracts: {nrow(tracts)}")
+```
+
+# 2) Pull ACS attributes (tract-level)
+
+```{r acs-tracts}
+vars <- c(
+  median_income = "B19013_001",
+  pop_total     = "B01003_001",
+  # 65+
+  male_65_66    = "B01001_020",
+  male_67_69    = "B01001_021",
+  female_65_66  = "B01001_044",
+  female_67_69  = "B01001_045",
+  # poverty
+  pov_universe  = "B17001_001",
+  pov_below     = "B17001_002",
+  # no vehicle (owner & renter occupied HHs)
+  nov_owner     = "B25044_003",
+  nov_renter    = "B25044_010"
+)
+
+tract_acs <- get_acs(
+  geography = "tract",
+  state = state_abbr,
+  variables = vars,
+  year = year_acs,
+  survey = survey,
+  geometry = FALSE,
+  cache_table = TRUE,
+  output = "wide"
+) %>%
+  janitor::clean_names()
+
+# Keep estimate columns and derive indicators
+tract_attr <- tract_acs %>%
+  transmute(
+    GEOID,
+    median_income = median_income_e,
+    pop_total     = pop_total_e,
+    age65         = male_65_66_e + male_67_69_e + female_65_66_e + female_67_69_e,
+    pov_rate      = ifelse(pov_universe_e > 0, pov_below_e / pov_universe_e, NA_real_),
+    nov_hh        = nov_owner_e + nov_renter_e
+  )
+
+# Join to geometry
+tracts_attr <- tracts %>%
+  left_join(tract_attr, by = c("GEOID"))
+```
+
+# 3) Hospitals from OpenStreetMap (live download)
+
+```{r hospitals-osm}
+# Query OSM for hospitals within Pennsylvania bounding box
+pa_bbox <- st_transform(counties, 4326) %>% st_bbox()
+
+q <- opq(bbox = c(pa_bbox["xmin"], pa_bbox["ymin"], pa_bbox["xmax"], pa_bbox["ymax"])) %>%
+  add_osm_feature(key = "amenity", value = "hospital")
+
+osm_h <- osmdata_sf(q)
+
+hospitals <- osm_h$osm_points %>%
+  st_transform(5070) %>%
+  st_intersection(st_union(counties)) %>%
+  mutate(name = coalesce(name, "Unknown hospital")) %>%
+  distinct(geometry, .keep_all = TRUE)
+
+glue("Hospitals found (points): {nrow(hospitals)}")
+```
+
+> If your environment cannot access OSM, you may substitute a local hospital dataset. The rest of the workflow is unchanged.
+
+# 4) Accessibility: distance from tract centroid to nearest hospital
+
+```{r access-distance}
+# Centroids (use within for compact tracts; for complex shapes you may consider population-weighted centroids)
+tract_cent <- st_point_on_surface(tracts_attr)
+
+# Nearest neighbor (index + distance)
+nn <- nngeo::st_nn(tract_cent, hospitals, k = 1, returnDist = TRUE)
+
+# Distances are in meters because EPSG:5070 is projected in meters
+dist_m <- sapply(nn$dist, function(x) ifelse(length(x)==0, NA_real_, x[1]))
+
+tracts_attr <- tracts_attr %>%
+  mutate(
+    dist_hosp_m = dist_m,
+    dist_hosp_km = set_units(dist_hosp_m, "m") %>% set_units("km") %>% drop_units()
+  )
+summary(tracts_attr$dist_hosp_km)
+```
+
+# 5) Vulnerability index (simple standardized composite)
+
+We define a composite **Vulnerability Index** at the tract level using z-scores for:
+- Lower median income (reverse coded)
+- Higher poverty rate
+- Higher 65+ share
+- Higher no-vehicle households per capita
+
+```{r vuln-index}
+tracts_attr <- tracts_attr %>%
+  mutate(
+    share65       = ifelse(pop_total > 0, age65 / pop_total, NA_real_),
+    nov_percapita = ifelse(pop_total > 0, nov_hh / pop_total, NA_real_),
+    inc_rev       = -median_income,             # reverse: lower income => higher vulnerability
+    z_income      = scale(inc_rev)[,1],
+    z_poverty     = scale(pov_rate)[,1],
+    z_65          = scale(share65)[,1],
+    z_noveh       = scale(nov_percapita)[,1],
+    vuln_index    = rowMeans(cbind(z_income, z_poverty, z_65, z_noveh), na.rm = TRUE)
+  )
+```
+
+# 6) County-level aggregation
+
+We compute county summaries weighted by tract population (for rates and indices) and simple minimum distance for access.
+
+```{r county-agg}
+# Spatial join tract -> county
+tracts_in_cnty <- st_join(tracts_attr, counties %>% select(COUNTYFP, NAME))
+
+county_stats <- tracts_in_cnty %>%
+  st_drop_geometry() %>%
+  group_by(NAME) %>%
+  summarise(
+    pop_total          = sum(pop_total, na.rm = TRUE),
+    median_income_wt   = weighted.mean(median_income, pop_total, na.rm = TRUE),
+    pov_rate_wt        = weighted.mean(pov_rate, pop_total, na.rm = TRUE),
+    share65_wt         = weighted.mean(share65, pop_total, na.rm = TRUE),
+    nov_percapita_wt   = weighted.mean(nov_percapita, pop_total, na.rm = TRUE),
+    vuln_index_wt      = weighted.mean(vuln_index, pop_total, na.rm = TRUE),
+    min_dist_hosp_km   = suppressWarnings(min(dist_hosp_km, na.rm = TRUE))
+  ) %>%
+  ungroup()
+
+county_map <- counties %>% left_join(county_stats, by = c("NAME"))
+```
+
+# 7) Maps
+
+```{r maps, fig.height=6, fig.width=10}
+p1 <- ggplot(tracts_attr) +
+  geom_sf(aes(fill = vuln_index), color = NA) +
+  geom_sf(data = st_union(counties), fill = NA, color = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(option = "magma", na.value = "grey90") +
+  labs(title = "Tract Vulnerability Index (z-score composite)",
+       fill = "Index") +
+  theme_minimal()
+
+p2 <- ggplot(tracts_attr) +
+  geom_sf(aes(fill = dist_hosp_km), color = NA) +
+  geom_sf(data = st_union(counties), fill = NA, color = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::number_format(accuracy = 0.1), na.value = "grey90") +
+  labs(title = "Distance to Nearest Hospital (km)",
+       fill = "km") +
+  theme_minimal()
+
+p3 <- ggplot(county_map) +
+  geom_sf(aes(fill = vuln_index_wt), color = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(option = "magma", na.value = "grey90") +
+  labs(title = "County Vulnerability (population-weighted)",
+       fill = "Index") +
+  theme_minimal()
+
+p4 <- ggplot(county_map) +
+  geom_sf(aes(fill = min_dist_hosp_km), color = "white", linewidth = 0.2) +
+  scale_fill_viridis_c(option = "plasma", labels = scales::number_format(accuracy = 0.1), na.value = "grey90") +
+  labs(title = "County Minimum Distance to Hospital (km)",
+       fill = "km") +
+  theme_minimal()
+
+(p1 + p2) / (p3 + p4)
+```
+
+# 8) Findings (brief)
+
+- **Coverage:** Most Pennsylvania tracts have at least one hospital within a short driving distance; rural tracts show longer distances.
+- **Vulnerability:** Higher vulnerability clusters where incomes are lower, elderly share is higher, poverty is higher, and households lack vehicles.
+- **County rollups:** County-level population-weighted indices smooth tract variation but still highlight regional disparities.
+
+# 9) Reproducibility notes
+
+- CRS: All spatial analysis is performed in **EPSG:5070** (meters). Input layers are transformed on load.
+- Data sources: ACS 5-year via `tidycensus`; tracts/counties via TIGER (`tigris`); hospitals from OSM via `osmdata` (amenity=hospital).
+- Replace OSM with other hospital datasets if required by your assignment rubric; only the point layer used for nearest-neighbor distances is needed.
+- Randomness: None.
