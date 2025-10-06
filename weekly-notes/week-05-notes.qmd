@@ -1,0 +1,30 @@
+---
+title: "Week 5 Notes"
+date: "2025-10-06"
+---
+
+## Key Concepts Learned
+- [List main concepts from lecture]
+- [Technical skills covered]
+src_transform
+src_
+
+quiz 3 questions
+
+
+## Coding Techniques
+- [New R functions or approaches]
+- [Quarto features learned]
+
+
+
+## Questions & Challenges
+- [What I didn't fully understand]
+- [Areas needing more practice]
+
+## Connections to Policy
+- [How this week's content applies to real policy work]
+
+## Reflection
+- [What was most interesting]
+- [How I'll apply this knowledge]
