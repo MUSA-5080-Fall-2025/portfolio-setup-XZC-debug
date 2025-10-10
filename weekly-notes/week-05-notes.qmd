@@ -6,12 +6,56 @@ date: "2025-10-06"
 ## Key Concepts Learned
 - [List main concepts from lecture]
 - [Technical skills covered]
-src_transform
-src_
+
 
 quiz 3 questions
+1.src_transform 
+src_set_crs
+2..refer to the previous variable
+3.st_filter(buffer,.predicate=st_intersects)    select complete features
+st_intersection(buffer)   clips geometries to create new shapes
 
 
+Introduction to Linear Regression
+Part 1: The Statistical Learning Framework
+Formalizing the Relationship
+f represents the true relationship between predictors and outcome
+Parametric (blue): We assume f is linear, then estimate β₀ and β₁
+Non-parametric (green): We let the data determine the shape of f
+t-statistic: How many standard errors away from 0?
+p-value: Probability of seeing our estimate if H₀ is true
+
+Part 2: Two Different Goals
+
+Part 3: Building Your First Model
+no hypothesis
+
+Part 4: Model Evaluation
+R²
+Underfitting: Model too simple (high bias)
+Good fit: Captures pattern without noise
+Overfitting: Memorizes training data (high variance)
+Cross-Validation
+
+Part 5: Checking Assumptions
+Assumption 1: Linearity
+What we assume: Relationship is actually linear
+How to check: Residual plot
+
+Assumption 2: Constant Variance
+Heteroscedasticity: Variance changes across X
+Impact: Standard errors are wrong → p-values misleading
+Assumption: Normality of Residuals
+Q-Q Plot
+
+Assumption 3: No Multicollinearity
+For multiple regression: Predictors shouldn’t be too correlated
+Why it matters: Coefficients become unstable, hard to interpret
+
+Assumption 4: No Influential Outliers
+Not all outliers are problems - only those with high leverage AND large residuals
+
+Part 6: Improving the Model
 ## Coding Techniques
 - [New R functions or approaches]
 - [Quarto features learned]

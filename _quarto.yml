@@ -1,6 +1,10 @@
 project:
   type: website
   output-dir: docs
+  render:    #白名单
+    - index.qmd
+    - assignments/assignment_1/census_quality.qmd
+    - assignments/assignment_2/assignment2.qmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
@@ -16,10 +20,16 @@ website:
             text: Weekly Notes 2
           - href: weekly-notes/week-03-notes.html
             text: Weekly Notes 3
+          - href: weekly-notes/week-04-notes.html
+            text: Weekly Notes 4
+          - href: weekly-notes/week-05-notes.html
+            text: Weekly Notes 5
       - text: Assignments
         menu:
           - href: assignments/assignment_1/census_quality.qmd
             text: "Assignment 1: Census Data Exploration"  
+          - href: assignments/assignment_2/assignment2.qmd
+            text: "Assignment 2: Spatial Analysis and Visualization"  
 
 format:
   html:
