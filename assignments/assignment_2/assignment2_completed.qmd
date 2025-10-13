@@ -43,7 +43,7 @@ year_acs <- 2022
 survey  <- "acs5"
 
 # If your CENSUS_API_KEY is not installed, uncomment and add your key:
-tidycensus::census_api_key("547c6d8007c794850c2b25b34f1ce85befe8ab09", install = TRUE, overwrite = TRUE)
+# tidycensus::census_api_key("YOUR_KEY_HERE", install = TRUE, overwrite = TRUE)
 ```
 
 # Data dictionary
@@ -67,28 +67,6 @@ tracts  <- tigris::tracts(state = state_abbr, year = 2023, cb = TRUE) %>%
   st_transform(5070)
 
 glue("Counties: {nrow(counties)}; Tracts: {nrow(tracts)}")
-
-# ---- Step 1 answers ----
-# Hospitals count
-n_hosp <- nrow(hospitals)
-
-# Tracts count
-n_tracts <- nrow(tracts)
-
-# CRS report
-crs_counties <- st_crs(counties)$input
-crs_tracts   <- st_crs(tracts)$input
-crs_hosp     <- st_crs(hospitals)$input
-
-glue::glue("
-Step 1 — Answers
-- Hospitals in dataset: {n_hosp}
-- Census tracts: {n_tracts}
-- CRS (counties): {crs_counties}
-- CRS (tracts):   {crs_tracts}
-- CRS (hospitals): {crs_hosp}
-")
-
 ```
 
 # 2) Pull ACS attributes (tract-level)
@@ -110,7 +88,7 @@ vars <- c(
   nov_renter    = "B25044_010"
 )
 
-# 
+# 不做 clean_names，直接使用 E/M 列
 tract_acs <- get_acs(
   geography = "tract",
   state = state_abbr,
@@ -122,7 +100,7 @@ tract_acs <- get_acs(
   output = "wide"
 )
 
-# 
+# 用 …E 列名
 tract_attr <- tract_acs %>%
   dplyr::transmute(
     GEOID,
@@ -133,7 +111,7 @@ tract_attr <- tract_acs %>%
     nov_hh        = nov_ownerE + nov_renterE
   )
 
-# 
+# Join 到几何
 tracts_attr <- tracts %>%
   dplyr::left_join(tract_attr, by = "GEOID")
 
@@ -201,7 +179,6 @@ tracts_attr <- tracts_attr %>%
     z_noveh       = scale(nov_percapita)[,1],
     vuln_index    = rowMeans(cbind(z_income, z_poverty, z_65, z_noveh), na.rm = TRUE)
   )
-
 ```
 
 # 6) County-level aggregation
@@ -210,7 +187,7 @@ We compute county summaries weighted by tract population (for rates and indices)
 
 ```{r county-agg}
 # Spatial join tract -> county
-# 
+# 安全加权平均：同步过滤 x 和 w 的有效值（都是有限数，且权重>0）
 safe_wmean <- function(x, w) {
   x <- as.numeric(x)
   w <- as.numeric(w)
@@ -219,14 +196,14 @@ safe_wmean <- function(x, w) {
   stats::weighted.mean(x[idx], w[idx])
 }
 
-# CRS
+# 确保 CRS 一致（若已一致可省略）
 counties <- sf::st_transform(counties, sf::st_crs(tracts_attr))
 
-# county_name
+# 只带入不会冲突的县字段，改名为 county_name
 cnty_keep <- counties %>%
   dplyr::select(COUNTYFP, county_name = NAME)
 
-# tract ∈ county
+# 空间连接（tract ∈ county）
 tracts_in_cnty <- sf::st_join(
   tracts_attr,
   cnty_keep,
@@ -234,7 +211,7 @@ tracts_in_cnty <- sf::st_join(
   left = TRUE
 )
 
-# numeric
+# 在 group_by 之前，把会参与计算的列都强制为 numeric，避免 list/units
 tracts_in_cnty_num <- tracts_in_cnty %>%
   dplyr::mutate(
     pop_total     = as.numeric(pop_total),
@@ -246,41 +223,28 @@ tracts_in_cnty_num <- tracts_in_cnty %>%
     dist_hosp_km  = as.numeric(dist_hosp_km)
   )
 
-# county
-safe_wmean <- function(x, w) {
-  x <- as.numeric(x); w <- as.numeric(w)
-  idx <- is.finite(x) & is.finite(w) & w > 0
-  if (!any(idx)) return(NA_real_)
-  stats::weighted.mean(x[idx], w[idx])
-}
-
+# 县级汇总：用 safe_wmean 避免 x 和 w 长度不一致
 county_stats <- tracts_in_cnty_num %>%
   sf::st_drop_geometry() %>%
   dplyr::group_by(county_name) %>%
   dplyr::summarise(
     n_tracts          = dplyr::n(),
+    pop_total         = sum(pop_total, na.rm = TRUE),
+    median_income_wt  = safe_wmean(median_income, pop_total),
+    pov_rate_wt       = safe_wmean(pov_rate, pop_total),
+    share65_wt        = safe_wmean(share65, pop_total),
+    nov_percapita_wt  = safe_wmean(nov_percapita, pop_total),
+    vuln_index_wt     = safe_wmean(vuln_index, pop_total),
+    min_dist_hosp_km  = suppressWarnings(min(dist_hosp_km, na.rm = TRUE))
+  ) %>%
+  dplyr::ungroup()
 
-    median_income_wt  = safe_wmean(.data$median_income, .data$pop_total),
-    pov_rate_wt       = safe_wmean(.data$pov_rate,      .data$pop_total),
-    share65_wt        = safe_wmean(.data$share65,       .data$pop_total),
-    nov_percapita_wt  = safe_wmean(.data$nov_percapita, .data$pop_total),
-    vuln_index_wt     = safe_wmean(.data$vuln_index,    .data$pop_total),
-
-    pop_total_sum     = sum(.data$pop_total, na.rm = TRUE),
-
-    min_dist_hosp_km  = suppressWarnings(min(.data$dist_hosp_km, na.rm = TRUE)),
-    .groups = "drop"
-  )
-
-# 
+# 并回县图层
 county_map <- counties %>%
   dplyr::left_join(county_stats, by = c("NAME" = "county_name"))
 
 
-
 ```
-
-
 
 # 7) Maps
 
@@ -320,12 +284,9 @@ p4 <- ggplot(county_map) +
 
 # 8) Findings (brief)
 
-- **Healthcare Accessibility:** Most census tracts in Pennsylvania have relatively short distances to the nearest hospital, especially in the eastern and southeastern regions around major cities such as Philadelphia, Pittsburgh, and Harrisburg.
-However, several rural counties in the north and central parts of the state show noticeably longer travel distances (over 30–50 km), indicating potential healthcare access challenges.
-- **Social Vulnerability::** Tract-level vulnerability (composite z-score) reveals higher vulnerability in parts of western and northern Pennsylvania, where lower median incomes, higher poverty rates, and a larger elderly population coincide.
-Urban tracts generally show lower vulnerability due to higher incomes and better transportation access.
-- **County-Level Aggregation:** When aggregated to the county scale, vulnerability differences become less pronounced—many counties show similar average scores—suggesting that county-level averages may mask substantial intra-county disparities present at the tract level.
-In contrast, county-level minimum hospital distance still highlights clear regional inequities, particularly across sparsely populated northern counties.
+- **Coverage:** Most Pennsylvania tracts have at least one hospital within a short driving distance; rural tracts show longer distances.
+- **Vulnerability:** Higher vulnerability clusters where incomes are lower, elderly share is higher, poverty is higher, and households lack vehicles.
+- **County rollups:** County-level population-weighted indices smooth tract variation but still highlight regional disparities.
 
 # 9) Reproducibility notes
 

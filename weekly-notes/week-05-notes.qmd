@@ -60,11 +60,30 @@ Part 6: Improving the Model
 - [New R functions or approaches]
 - [Quarto features learned]
 
+original codes:
+# county
+county_stats <- tracts_in_cnty_num %>%
+  sf::st_drop_geometry() %>%
+  dplyr::group_by(county_name) %>%
+  dplyr::summarise(
+    n_tracts          = dplyr::n(),
+    pop_total         = sum(pop_total, na.rm = TRUE),
+    median_income_wt  = safe_wmean(median_income, pop_total),
+    pov_rate_wt       = safe_wmean(pov_rate, pop_total),
+    share65_wt        = safe_wmean(share65, pop_total),
+    nov_percapita_wt  = safe_wmean(nov_percapita, pop_total),
+    vuln_index_wt     = safe_wmean(vuln_index, pop_total),
+    min_dist_hosp_km  = suppressWarnings(min(dist_hosp_km, na.rm = TRUE))
+  ) %>%
+  dplyr::ungroup()
+  
 
 
 ## Questions & Challenges
 - [What I didn't fully understand]
 - [Areas needing more practice]
+
+The issue occurred because, within the county-level aggregation step, the population-weighted averages were calculated after redefining pop_total inside summarise(). This caused the weight variable to be replaced by the newly aggregated (scalar) population value instead of the original tract-level vector, leading to all vuln_index_wt results becoming NA. After debugging, it was confirmed that tract-level vuln_index values were valid and that each county had sufficient valid data pairs. The fix was to reorder the summarization so that all weighted means were computed before redefining pop_total, and to explicitly reference columns using .data$ to avoid name masking. This correction restored proper population-weighted calculations and produced valid county-level vulnerability scores.
 
 ## Connections to Policy
 - [How this week's content applies to real policy work]
