@@ -1,0 +1,48 @@
+---
+title: "Team Exercise: Build Your Best Hedonic Model (with Tract-based Neighborhood FE)"
+author: "MUSA 5080"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(janitor)
+library(broom)
+library(sf)
+library(here)
+library(caret)        # 10-fold CV
+library(car)          # VIF
+library(lmtest)       # BP test
+library(sandwich)     # robust vcov
+library(tigris)       # 2020 tracts + places
+options(tigris_use_cache = TRUE, tigris_year = 2020)
+
+set.seed(5080)
+theme_set(theme_minimal())
+options(dplyr.summarise.inform = FALSE)
+```
+
+```{r}
+#| label: load-data
+
+housing <- readr::read_csv(here("data/boston.csv")) |> clean_names()
+
+
+tract_map_raw <- readr::read_csv(here("data/boston_neighborhood_boundaries_approximated_by_2020_census_tracts.csv")) |> 
+  clean_names()
+
+glimpse(housing)
+glimpse(tract_map_raw)
+
+```
+

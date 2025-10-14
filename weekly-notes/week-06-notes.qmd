@@ -1,0 +1,67 @@
+---
+title: "Week 6 Notes"
+date: "2025-10-13"
+---
+
+## Key Concepts Learned
+- [List main concepts from lecture]
+- [Technical skills covered]
+
+Spatial Machine Learning & Advanced Regression
+
+Converting to Spatial Data
+Step 1: Make your data spatial
+Step 2: Spatial Join with Neighborhoods
+
+Part 1: Expanding Your Regression Toolkit
+
+Model 1: No Interaction (Parallel Slopes)
+Model 2: With Interaction (Different Slopes)
+
+When Not To Use Interactions
+Warning
+
+When NOT to Use Interactions:
+
+Small samples: Need sufficient data in each group
+Overfitting: Too many interactions make models unstable
+
+Polynomial Regression
+
+Part 2: Creating Spatial Features
+Tobler’s First Law of Geography
+Three Approaches to Spatial Features
+1️⃣ Buffer Aggregation
+Count or sum events within a defined distance
+Example: Number of crimes within 500 feet
+2️⃣ k-Nearest Neighbors (kNN)
+Average distance to k closest events
+Example: Average distance to 3 nearest violent crimes
+3️⃣ Distance to Specific Points
+Straight-line distance to important locations
+Example: Distance to downtown, nearest T station
+
+Part 3: Fixed Effects
+Categorical variables that capture all unmeasured characteristics of a group
+
+
+## Coding Techniques
+- [New R functions or approaches]
+- [Quarto features learned]
+
+
+  
+
+
+## Questions & Challenges
+- [What I didn't fully understand]
+- [Areas needing more practice]
+
+
+
+## Connections to Policy
+- [How this week's content applies to real policy work]
+
+## Reflection
+- [What was most interesting]
+- [How I'll apply this knowledge]

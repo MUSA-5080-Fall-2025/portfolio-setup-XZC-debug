@@ -90,6 +90,13 @@ Step 1 — Answers
 ")
 
 ```
+**Questions to answer:**
+- How many hospitals are in your dataset?5644
+- How many census tracts?3445
+- What coordinate reference system is each dataset in?- CRS (counties): EPSG:5070
+- CRS (tracts):   EPSG:5070
+- CRS (hospitals): EPSG:5070
+
 
 # 2) Pull ACS attributes (tract-level)
 
