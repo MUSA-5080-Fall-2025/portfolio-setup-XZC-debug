@@ -4,7 +4,7 @@ project:
   render:    #白名单
     - index.qmd
     - assignments/assignment_1/census_quality.qmd
-    - assignments/assignment_2/assignment2.qmd
+    - assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
@@ -28,7 +28,7 @@ website:
         menu:
           - href: assignments/assignment_1/census_quality.qmd
             text: "Assignment 1: Census Data Exploration"  
-          - href: assignments/assignment_2/assignment2.qmd
+          - href: assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
             text: "Assignment 2: Spatial Analysis and Visualization"  
 
 format:

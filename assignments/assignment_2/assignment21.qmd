@@ -1,0 +1,103 @@
+---
+title: "Assignment 2: Spatial Analysis and Visualization"
+subtitle: "Healthcare Access and Equity in Pennsylvania"
+author: "Zicheng Xiang"
+date: "today"
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-location: left
+    theme: cosmo
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## Part 1: Healthcare Access for Vulnerable Populations
+
+#### Step 1: Data Collection (5 points)
+
+Load the required spatial data:
+- Pennsylvania county boundaries
+- Pennsylvania hospitals (from lecture data)
+- Pennsylvania census tracts
+
+**Your Task:**
+```{r}
+#| echo: true
+# Load required packages
+required_pkgs <- c(
+  "tidyverse","sf","tigris","tidycensus","units","nngeo",
+  "ggplot2","scales","janitor","glue","patchwork","osmdata"
+)
+for (p in required_pkgs) {
+  if (!requireNamespace(p, quietly = TRUE)) install.packages(p)
+  library(p, character.only = TRUE)
+}
+options(tigris_use_cache = TRUE, tigris_class = "sf")
+
+
+# Load spatial data
+state_abbr <- "PA"
+state_name <- "Pennsylvania"
+ # Use ACS 5-year for small-area reliability
+year_acs <- 2022
+survey  <- "acs5"
+ # If your CENSUS_API_KEY is not installed, uncomment and add your key:
+tidycensus::census_api_key("547c6d8007c794850c2b25b34f1ce85befe8ab09", install = TRUE, overwrite = TRUE)
+
+# Check that all data loaded correctly
+ # Check packages loaded correctly
+cat("Loaded packages:\n")
+print(search())
+
+ # Check tigris and tidycensus configuration
+cat("\nTigris options:\n")
+print(options()$tigris_use_cache)
+print(options()$tigris_class)
+
+cat("\nCensus API Key successfully installed:\n")
+Sys.getenv("CENSUS_API_KEY")
+
+ # Quick test: get county boundaries for Pennsylvania
+cat("\nDownloading PA counties to check connection...\n")
+pa_counties <- tigris::counties(state = state_abbr, cb = TRUE, year = 2022)
+
+ # Quick check of the object
+cat("\nPA counties loaded correctly? ->\n")
+print(pa_counties %>% sf::st_geometry_type() %>% table())
+
+ # Quick visualization to confirm spatial data
+plot(sf::st_geometry(pa_counties), main = "Pennsylvania Counties (Check)")
+
+# ---- Step 1 answers ----
+# Hospitals count
+n_hosp <- nrow(hospitals)
+
+# Tracts count
+n_tracts <- nrow(tracts)
+
+# CRS report
+crs_counties <- st_crs(counties)$input
+crs_tracts   <- st_crs(tracts)$input
+crs_hosp     <- st_crs(hospitals)$input
+
+glue::glue("
+Step 1 — Answers
+- Hospitals in dataset: {n_hosp}
+- Census tracts: {n_tracts}
+- CRS (counties): {crs_counties}
+- CRS (tracts):   {crs_tracts}
+- CRS (hospitals): {crs_hosp}
+")
+
+```
+
+**Questions to answer:**
+- How many hospitals are in your dataset?5644
+- How many census tracts?3445
+- What coordinate reference system is each dataset in? CRS (counties): EPSG:5070;CRS (tracts): EPSG:5070;CRS (hospitals): EPSG:5070
+
+---
