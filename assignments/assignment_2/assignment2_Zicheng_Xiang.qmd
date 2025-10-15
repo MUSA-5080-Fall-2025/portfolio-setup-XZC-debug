@@ -24,7 +24,7 @@ execute:
 - Work with spatial data from multiple sources
 - Communicate findings effectively for policy audiences
 
----
+ 
 
 
 ## Part 1: Healthcare Access for Vulnerable Populations
@@ -39,7 +39,7 @@ Load the required spatial data:
 **Your Task:**
 ```{r}
 #| echo: true
-# ---- Step 1: Packages & global params ----
+#  - Step 1: Packages & global params  -
 required_pkgs <- c(
   "tidyverse","sf","tigris","tidycensus","units","nngeo",
   "ggplot2","scales","janitor","glue","patchwork","osmdata"
@@ -50,7 +50,7 @@ for (p in required_pkgs) {
 }
 options(tigris_use_cache = TRUE, tigris_class = "sf")
 
-# ---- define BEFORE any use ----
+#  - define BEFORE any use  -
 state_abbr <- "PA"
 state_name <- "Pennsylvania"
 year_acs   <- 2022
@@ -59,14 +59,14 @@ survey     <- "acs5"
 # 如需：安装 API Key（可注释）
 # tidycensus::census_api_key("YOUR_KEY_HERE", install = TRUE, overwrite = TRUE)
 
-# ---- geometries (use EPSG:5070 for distance in meters) ----
+#  - geometries (use EPSG:5070 for distance in meters)  -
 counties <- tigris::counties(state = state_abbr, cb = TRUE, year = 2022) |>
   sf::st_as_sf() |> sf::st_transform(5070)
 
 tracts <- tigris::tracts(state = state_abbr, year = 2022, cb = TRUE) |>
   sf::st_as_sf() |> sf::st_transform(5070)
 
-# ---- hospitals from OSM within PA bbox ----
+#  - hospitals from OSM within PA bbox  -
 pa_bbox <- sf::st_transform(counties, 4326) |> sf::st_bbox()
 q <- opq(bbox = c(pa_bbox["xmin"], pa_bbox["ymin"], pa_bbox["xmax"], pa_bbox["ymax"])) |>
   add_osm_feature(key = "amenity", value = "hospital")
@@ -78,7 +78,7 @@ hospitals <- osm_h$osm_points |>
   dplyr::mutate(name = dplyr::coalesce(name, "Unknown hospital")) |>
   dplyr::distinct(geometry, .keep_all = TRUE)
 
-# ---- quick checks / answers scaffolding ----
+#  - quick checks / answers scaffolding  -
 cat("Loaded packages:\n"); print(search())
 cat("\nTigris options:\n"); print(options()$tigris_use_cache); print(options()$tigris_class)
 
@@ -112,7 +112,7 @@ Step 1 — Answers
 - How many census tracts?3445
 - What coordinate reference system is each dataset in? CRS (counties): EPSG:5070;CRS (tracts): EPSG:5070;CRS (hospitals): EPSG:5070
 
----
+ 
 
 #### Step 2: Get Demographic Data 
 
@@ -172,7 +172,7 @@ tract_attr <- tract_acs %>%
 tracts_attr <- tracts %>%
   dplyr::left_join(tract_attr, by = "GEOID")
 
-# ---- Step 2 answers ----
+#  - Step 2 answers  -
 sum(is.na(tracts_attr$median_income))
 median(tracts_attr$median_income, na.rm = TRUE)
 
@@ -184,7 +184,7 @@ median(tracts_attr$median_income, na.rm = TRUE)
 - How many tracts have missing income data?62
 - What is the median income across all PA census tracts?70188
 
----
+ 
 
 #### Step 3: Define Vulnerable Populations 
 
@@ -224,7 +224,7 @@ This threshold captures tracts where aging demographics may increase healthcare 
 - How many tracts meet your vulnerability criteria? Based on these two criteria (median_income < 70000 and share65 > 0.20), about 620 tracts across Pennsylvania meet both thresholds.
 - What percentage of PA census tracts are considered vulnerable by your definition?About 18% of tracts are considered vulnerable under the combined low-income and elderly criteria.
 
----
+ 
 
 #### Step 4: Calculate Distance to Hospitals 
 
@@ -280,7 +280,7 @@ sum(tracts_attr$dist_hosp_km > 24.1, na.rm = TRUE)
 - What is the maximum distance? 51.890854
 - How many vulnerable tracts are more than 15 miles from the nearest hospital? 69
 
----
+ 
 
 #### Step 5: Identify Underserved Areas 
 
@@ -290,12 +290,12 @@ Define "underserved" as vulnerable tracts that are more than 15 miles from the n
 ```{r}
 # Create underserved variable
 
-# --- thresholds (data-driven; adjust if you prefer fixed cutoffs) ---
+#   thresholds (data-driven; adjust if you prefer fixed cutoffs)  
 income_threshold   <- quantile(tracts_attr$median_income, 0.25, na.rm = TRUE)  # bottom 25% income
 elderly_threshold  <- quantile(tracts_attr$share65,       0.75, na.rm = TRUE)  # top 25% 65+ share
 fifteen_miles_km   <- units::set_units(15, "mi") |> units::set_units("km") |> units::drop_units()
 
-# --- flags: vulnerable & underserved ---
+#   flags: vulnerable & underserved  
 tracts_attr <- tracts_attr %>%
   mutate(
     vulnerable  = (median_income < income_threshold) & (share65 > elderly_threshold),
@@ -317,7 +317,7 @@ Share underserved: {round(100 * mean(tracts_attr$underserved, na.rm = TRUE), 1)}
 - What percentage of vulnerable tracts are underserved? 0.2%
 - Does this surprise you? Why or why not?I’m not surprised, because vulnerable populations in Pennsylvania are concentrated in rural areas where healthcare facilities are sparse and travel distances are naturally longer.
 
----
+ 
 
 #### Step 6: Aggregate to County Level
 
@@ -391,7 +391,7 @@ county_stats <- tracts_in_cnty_num %>%
 county_map <- counties %>%
   dplyr::left_join(county_stats, by = c("NAME" = "county_name"))
 
-# ---- Step 6 answers ----
+#  - Step 6 answers  -
 # 1️⃣ 计算每个县的脆弱与欠服务 tract 占比
 county_underserved <- tracts_in_cnty_num %>%
   sf::st_drop_geometry() %>%
@@ -445,7 +445,7 @@ top5_pop %>% knitr::kable(digits = 0, caption = "Counties with Most Vulnerable P
 - Are there any patterns in where underserved counties are located? No, this pattern is not surprising.
 The underserved counties are predominantly located in northern and central Pennsylvania, which are mountainous, sparsely populated, and rural.
 
----
+ 
 
 #### Step 7: Create Summary Table 
 
@@ -454,7 +454,7 @@ Create a professional table showing the top 10 priority counties for healthcare 
 **Your Task:**
 ```{r}
 # Create and format priority counties table
-# --- county-level vulnerable metrics (meets the "Required county-level statistics") ---
+#   county-level vulnerable metrics (meets the "Required county-level statistics")  
 county_vuln_metrics <- tracts_in_cnty_num %>%
   sf::st_drop_geometry() %>%
   dplyr::group_by(county_name) %>%
@@ -470,7 +470,7 @@ county_vuln_metrics <- tracts_in_cnty_num %>%
     .groups = "drop"
   )
 
-# --- join with existing county-level stats to get county population & min distance ---
+#   join with existing county-level stats to get county population & min distance  
 county_vuln_metrics <- county_vuln_metrics %>%
   dplyr::left_join(
     county_stats %>%
@@ -478,7 +478,7 @@ county_vuln_metrics <- county_vuln_metrics %>%
     by = "county_name"
   )
 
-# --- priority score (you can tweak weights if needed) ---
+#   priority score (you can tweak weights if needed)  
 # Higher % underserved (among vulnerable), more vulnerable pop far from hospitals, and longer avg distance => higher priority
 county_priority <- county_vuln_metrics %>%
   dplyr::mutate(
@@ -491,7 +491,7 @@ county_priority <- county_vuln_metrics %>%
   dplyr::arrange(dplyr::desc(priority_score)) %>%
   dplyr::slice_head(n = 10)
 
-# --- pretty formatting for table output ---
+#   pretty formatting for table output  
 priority_table <- county_priority %>%
   dplyr::transmute(
     County                        = county_name,
@@ -505,7 +505,7 @@ priority_table <- county_priority %>%
     `Priority Score`              = scales::number(priority_score, accuracy = 0.001)
   )
 
-# --- render professional table ---
+#   render professional table  
 knitr::kable(
   priority_table,
   caption = "Top 10 Priority Counties for Healthcare Investment in Pennsylvania (Composite of % underserved among vulnerable tracts, vulnerable population >15 miles from hospitals, and average distance for vulnerable tracts)."
@@ -522,11 +522,12 @@ knitr::kable(
 - Add an informative caption
 - Sort by priority (you decide the metric)
 
----
+ 
 ## Part 2: Comprehensive Visualization 
 
-Using the skills from Week 3 (Data Visualization), create publication-quality maps and charts.
+#Using the skills from Week 3 (Data Visualization), create publication-quality maps and charts.
 
+ 
 ### Map 1: County-Level Choropleth 
 
 Create a choropleth map showing healthcare access challenges at the county level.
@@ -588,7 +589,7 @@ ggplot() +
 - Use `theme_void()` or similar clean theme
 - Add a legend with formatted labels
 
----
+ 
 
 ### Map 2: Detailed Vulnerability Map 
 
@@ -659,7 +660,7 @@ ggplot() +
 - Use appropriate visual hierarchy (what should stand out?)
 - Include informative title and subtitle
 
----
+ 
 
 ### Chart: Distribution Analysis
 
@@ -750,8 +751,7 @@ p_bar
 - Professional formatting
 - Brief interpretation (1-2 sentences as a caption or in text)
 
----
-
+ 
 ## Part 3: Bring Your Own Data Analysis 
 
 Choose your own additional spatial dataset and conduct a supplementary analysis.
@@ -762,7 +762,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 
 **Note these are just loose suggestions to spark ideas - follow or make your own as the data permits and as your ideas evolve. This analysis should include bringing in your own dataset, ensuring the projection/CRS of your layers align and are appropriate for the analysis (not lat/long or geodetic coordinate systems). The analysis portion should include some combination of spatial and attribute operations to answer a relatively straightforward question**
 
----
+ 
 
 #### Education & Youth Services
 
@@ -778,7 +778,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Operations:** Buffer schools (1000ft safety zone), spatial join with crime incidents, assess bike infrastructure coverage
 - **Policy relevance:** Safe Routes to School programs, crossing guard placement
 
----
+ 
 
 #### Environmental Justice
 
@@ -787,7 +787,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Question:** "Do low-income and minority neighborhoods have equitable access to green space?"
 - **Operations:** Buffer parks (10-minute walk = 0.5 mile), calculate tree canopy or park acreage per capita, compare by demographics
 - **Policy relevance:** Climate resilience, environmental justice, urban forestry investment
----
+ 
 
 #### Public Safety & Justice
 
@@ -796,7 +796,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Question:** "Are high-crime areas underserved by community resources?"
 - **Operations:** Aggregate crime counts to census tracts or neighborhoods, count community resources per area, spatial correlation analysis
 - **Policy relevance:** Community investment, violence prevention strategies
----
+ 
 
 #### Infrastructure & Services
 
@@ -806,7 +806,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Operations:** Buffer polling places and transit stops, identify vulnerable populations, find areas lacking access
 - **Policy relevance:** Voting rights, election infrastructure, ADA compliance
 
----
+ 
 
 #### Health & Wellness
 
@@ -816,7 +816,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Operations:** Calculate recreation facilities per capita by neighborhood, buffer facilities for walking access, overlay with demographic indicators
 - **Policy relevance:** Public health investment, recreation programming, obesity prevention
 
----
+ 
 
 #### Emergency Services
 
@@ -826,7 +826,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Operations:** Create service area buffers (5-minute drive = ~2 miles), assess population coverage, identify gaps in high-density areas
 - **Policy relevance:** Emergency preparedness, station siting decisions
 
----
+ 
 
 #### Arts & Culture
 
@@ -836,7 +836,7 @@ Choose ONE of the following challenge exercises, or propose your own research qu
 - **Operations:** Count cultural assets per neighborhood, normalize by population, compare distribution across demographic groups
 - **Policy relevance:** Cultural equity, tourism, quality of life, neighborhood identity
 
----
+ 
 
 ### Data Sources
 
@@ -878,12 +878,12 @@ crs_info <- st_crs(housing_raw)
 cat("Number of features:", n_features, "\n")
 cat("Original CRS:", crs_info$input, "\n")
 
-#Transform CRS to match project CRS (UTM 18N; EPSG:26918) ----
+#Transform CRS to match project CRS (UTM 18N; EPSG:26918)  -
 analysis_crs <- 26918
 housing <- st_transform(housing_raw, analysis_crs)
 cat("Transformed CRS:", st_crs(housing)$input, "\n")
 
-#Basic summary statistics ----
+#Basic summary statistics  -
 summary(select(st_drop_geometry(housing), contains("YEAR"), contains("STATUS"), contains("ADDRESS")))
 
 ```
@@ -896,7 +896,7 @@ It contains projects completed since 1994 and was last updated in 2024.
 - How many features does it contain?443
 - What CRS is it in? Did you need to transform it?WGS 84 / Pseudo-Mercator ,EPSG:26918 
 
----
+ 
 
 2. **Pose a research question**
 
@@ -914,7 +914,7 @@ Findings can inform city planning and equitable investment strategies for both h
 healthcare infrastructure, highlighting neighborhoods where affordable housing expansion should
 be paired with improved health service accessibility.
 
----
+ 
 
 3. **Conduct spatial analysis**
 
@@ -950,17 +950,16 @@ Use at least TWO spatial operations to answer your research question.
 ## Finally - A few comments about your incorporation of feedback!
 Take a few moments to clean up your markdown document and then write a line or two or three about how you may have incorporated feedback that you recieved after your first assignment. 
 
----
-
+ 
 ## Submission Requirements
 
 **What to submit:**
 
-1. **Rendered HTML document posted to your course portfolio** with all code, outputs, maps, and text
-   - Use `embed-resources: true` in YAML so it's a single file
-   - All code should run without errors
-   - All maps and charts should display correctly
+#1. **Rendered HTML document posted to your course portfolio** with all code, outputs, maps, and text
+    Use `embed-resources: true` in YAML so it's a single file
+    All code should run without errors
+    All maps and charts should display correctly
 
-**File naming:** `LastName_FirstName_Assignment2.html` and `LastName_FirstName_Assignment2.qmd`
+**File naming:** `LastName_FirstName_Assignment2.html` and LastName_FirstName_Assignment2.qmd`
 
----
+ 
