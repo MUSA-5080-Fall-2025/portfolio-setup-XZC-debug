@@ -28,7 +28,7 @@ website:
         menu:
           - href: assignments/assignment_1/census_quality.qmd
             text: "Assignment 1: Census Data Exploration"  
-          - href: docs/assignments/assignment_2/assignment2_Zicheng_Xiang.html
+          - href: assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
             text: "Assignment 2: Spatial Analysis and Visualization"  
 
 format:
