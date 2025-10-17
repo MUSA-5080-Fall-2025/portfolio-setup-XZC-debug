@@ -48,11 +48,38 @@ Load the required spatial data:
 **Your Task:**
 ```{r}
 # Load required packages
+required_pkgs <- c(
+"tidyverse","sf","tigris","tidycensus","units","janitor"
+)
 
+for (p in required_pkgs) {
+if (!requireNamespace(p, quietly = TRUE)) install.packages(p)
+library(p, character.only = TRUE)
+}
+
+options(tigris_use_cache = TRUE, tigris_class = "sf")
+tidycensus::census_api_key("547c6d8007c794850c2b25b34f1ce85befe8ab09", install = TRUE, overwrite = TRUE)
+
+state_abbr <- "PA"
+state_name <- "Pennsylvania"
+analysis_crs <- 26918 # NAD83 / UTM zone 18N
 
 # Load spatial data
+pa_counties <- tigris::counties(state = state_abbr, year = 2022, cb = TRUE) |>
+st_as_sf() |>
+janitor::clean_names()
 
-
+pa_tracts <- tidycensus::get_acs(
+geography = "tract",
+state = state_abbr,
+year = 2022,
+survey = "acs5",
+variables = "B01001_001", # total population
+geometry = TRUE,
+cache_table = TRUE
+) |>
+st_as_sf() |>
+janitor::clean_names()
 
 
 # Check that all data loaded correctly
