@@ -5,6 +5,8 @@ project:
     - index.qmd
     - assignments/assignment_1/census_quality.qmd
     - assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
+    - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Appendix.qmd
+    - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
