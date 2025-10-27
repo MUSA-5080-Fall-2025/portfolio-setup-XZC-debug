@@ -1,0 +1,96 @@
+---
+title: "Week 6 Notes"
+date: "2025-10-20"
+---
+
+## Key Concepts Learned
+- [List main concepts from lecture]
+- [Technical skills covered]
+
+tricks:
+1.fixed effects
+  categorical vars
+minus 1 because reference   prevent 多重共线性 (multicollinearity)
+
+2.interaction terms
+  square a curve
+
+3.k-folds
+  recommend 10
+  
+quiz
+1. You're analyzing environmental justice...
+✅ B) Buffer aggregation (count facilities within X meters)
+→ Because environmental exposure is typically measured by how many pollutant sources fall within a fixed distance (e.g., within 1 km) of a tract.
+
+2. Why might a model with neighborhood fixed effects have high in-sample R² (0.88) but worse cross-validated RMSE than expected?
+✅ D) The model may be overfitting to neighborhood-specific noise rather than learning generalizable patterns.
+→ Fixed effects can capture idiosyncratic variation in each neighborhood, inflating R² but hurting out-of-sample performance.
+
+3. In a model with Age + I(Age²), the coefficient on Age² is positive and significant. What does this suggest?
+✅ B) The relationship is U-shaped (decreases then increases).
+→ Positive Age² means curvature opens upward; after an initial decline, prices rise again with age.
+
+4. Recommended best practice when categorical variables have very few observations (n < 10) for 10-fold CV:
+✅ C) Group small categories into an “Other” or “Small Neighborhoods” category before running CV.
+→ Ensures each fold has enough representation and prevents folds without certain categories.
+
+eval
+echo
+
+Part 1: Review & Connect
+
+Where we’ve been and where we’re going
+The regression workflow so far
+
+Building the model:
+
+Visualize relationships
+Engineer features
+Fit the model
+Evaluate performance (RMSE, R²)
+Check assumptions
+NEW: Spatial diagnostics:
+
+Are errors random or clustered?
+Do we predict better in some areas?
+Is there remaining spatial structure?
+
+Tobler’s First Law
+
+
+
+Part 2: Evaluating Model Quality
+
+Train/test splits vs. cross-validation review
+Spatial patterns in errors
+Introduction to spatial autocorrelation
+Part 3: Moran’s I as a Diagnostic
+Moran’s I 空间自相关
+
+
+Understanding spatial clustering
+Calculating and interpreting Moran’s I
+Local vs. global measures
+
+
+## Coding Techniques
+- [New R functions or approaches]
+- [Quarto features learned]
+
+
+  
+
+
+## Questions & Challenges
+- [What I didn't fully understand]
+- [Areas needing more practice]
+
+
+
+## Connections to Policy
+- [How this week's content applies to real policy work]
+
+## Reflection
+- [What was most interesting]
+- [How I'll apply this knowledge]

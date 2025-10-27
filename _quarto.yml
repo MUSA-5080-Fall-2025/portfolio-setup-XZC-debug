@@ -30,6 +30,10 @@ website:
             text: "Assignment 1: Census Data Exploration"  
           - href: assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
             text: "Assignment 2: Spatial Analysis and Visualization"  
+          - href: assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Appendix.qmd
+            text: "Assignment 3: Midterm Appendix"
+          - href: assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
+            text: "Assignment 3: Midterm Presentation"  
 
 format:
   html:

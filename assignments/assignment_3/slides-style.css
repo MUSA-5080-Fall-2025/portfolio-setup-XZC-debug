@@ -1,0 +1,265 @@
+/* slides-styles.css — visual polish without changing content or slide count */
+
+/* Base typography */
+:root {
+  --accent: #0ea5e9;       /* cyan-500 */
+  --accent-2: #6366f1;     /* indigo-500 */
+  --text: #0f172a;         /* slate-900 */
+  --muted: #475569;        /* slate-600 */
+}
+
+.reveal .slides {
+  letter-spacing: 0.005em;
+  color: var(--text);
+}
+
+.reveal h1, .reveal h2, .reveal h3 {
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+
+.reveal h2 {
+  border-left: 6px solid var(--accent);
+  padding-left: 12px;
+}
+
+/* Paragraphs and lists spacing */
+.reveal p { line-height: 1.45; }
+.reveal ul, .reveal ol { margin-top: 0.4em; margin-bottom: 0.4em; }
+.reveal li { margin: 0.25em 0; }
+
+/* Two-column layout breathing room */
+.reveal .columns { gap: min(6vw, 36px); }
+.reveal .column { padding-top: 4px; }
+
+
+/* Keep small images small if the author set an explicit width.
+   For bare images, give them a friendly default max width. */
+.reveal section img:not([style*="width"]) {
+  max-width: 86%;
+}
+
+/* Figure captions (if any) */
+.reveal figcaption, .reveal .quarto-figure-caption {
+  color: var(--muted);
+  font-size: 0.75em;
+}
+
+/* Blockquotes: accent bar + subtle background */
+.reveal blockquote {
+  background: linear-gradient(90deg, rgba(14,165,233,0.08), rgba(99,102,241,0.08));
+  border-left: 6px solid var(--accent-2);
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+/* Tables */
+.reveal table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  box-shadow: 0 8px 16px rgba(2,6,23,0.06);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.reveal th, .reveal td { padding: 10px 12px; }
+.reveal thead th {
+  background: linear-gradient(90deg, rgba(14,165,233,0.12), rgba(99,102,241,0.12));
+  text-align: left;
+}
+.reveal tbody tr:nth-child(odd) td { background: rgba(148,163,184,0.06); }
+
+/* Code blocks — quieter visuals */
+.reveal pre, .reveal code {
+  border-radius: 10px !important;
+}
+
+/* Slide numbers: tuck into a pill */
+.reveal .slide-number {
+  background: rgba(15,23,42,0.65);
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+}
+
+/* Progress bar in accent color */
+.reveal .progress span {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* Title slide (if you ever enable it). We still style the first slide's heading for a hero feel. */
+.reveal section.slide h1, 
+.reveal section.slide:first-of-type h2 {
+  background: linear-gradient(90deg, #0ea5e9, #6366f1);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Compact tweaks for slides that used the class `tiny` */
+.reveal section.tiny h2 { font-size: 1.0em; }
+.reveal section.tiny p, 
+.reveal section.tiny li { font-size: 0.9em; }
+
+/* Prevent accidental layout shifts from images inside paragraph tags */
+.reveal section p > img { display: block; margin: 0.6rem auto; }
+
+/* Keep content aligned to top (author set center: false) with a tad of top padding */
+.reveal .slides section { padding-top: 6px; }
+
+
+/* --- Anti-cropping rules for slide images (ensure full image is visible) --- */
+.reveal section img {
+  max-height: 68vh;   /* keep inside the slide viewport */
+  height: auto;
+  width: auto;        /* respect intrinsic width unless author sets width */
+  object-fit: contain;
+}
+
+/* For figures that add extra spacing, tighten margins to avoid pushing content out */
+.reveal figure, .reveal .quarto-figure {
+  margin: 0.4rem auto 0.6rem auto;
+}
+
+/* If a slide still has too-tall content, allow gentle vertical scroll instead of cropping */
+.reveal .slides section {
+  overflow-y: auto;
+}
+
+
+
+/* --- Fit-to-slide adjustments (no scrollbar, smaller font & tighter spacing) --- */
+.reveal .slides section {
+  overflow: hidden !important;   /* remove scrollbars entirely */
+  padding-top: 0.5em;
+}
+
+.reveal p, .reveal li {
+  font-size: 0.9em;
+  line-height: 1.3;
+}
+
+.reveal h1 {
+  font-size: 1.6em;
+}
+
+.reveal h2 {
+  font-size: 1.3em;
+}
+
+.reveal section img {
+  max-height: 60vh;  /* slightly smaller image to fit all content */
+  object-fit: contain;
+}
+
+
+
+/* --- First slide layout: text left, image right --- */
+.reveal .slides section:first-of-type {
+  display: grid;
+  grid-template-columns: 55% 45%;
+  align-items: center;
+  gap: 2%;
+}
+
+/* Left column (text) */
+.reveal .slides section:first-of-type p,
+.reveal .slides section:first-of-type ul,
+.reveal .slides section:first-of-type li {
+  font-size: 1.05em;
+  line-height: 1.45;
+}
+
+/* Title on first slide slightly larger */
+.reveal .slides section:first-of-type h2 {
+  font-size: 1.3em;
+  line-height: 1.25;
+}
+
+/* Right column (image) */
+.reveal .slides section:first-of-type img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  margin: auto;
+  display: block;
+}
+
+
+
+/* --- First slide image placement & visibility fix --- */
+.reveal .slides section:first-of-type {
+  grid-auto-rows: min-content;
+}
+
+.reveal .slides section:first-of-type > h1,
+.reveal .slides section:first-of-type > h2,
+.reveal .slides section:first-of-type > h3,
+.reveal .slides section:first-of-type > p,
+.reveal .slides section:first-of-type > ul,
+.reveal .slides section:first-of-type > ol,
+.reveal .slides section:first-of-type > blockquote {
+  grid-column: 1;
+}
+
+.reveal .slides section:first-of-type > figure,
+.reveal .slides section:first-of-type > .quarto-figure,
+.reveal .slides section:first-of-type > p:has(img) {
+  display: contents; /* let the image itself become the grid item */
+}
+
+.reveal .slides section:first-of-type img {
+  grid-column: 2;
+  justify-self: center;
+  align-self: center;
+  max-height: 78vh;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+
+
+
+/* --- eighth slide smaller font tweak --- */
+.reveal .slides section:nth-of-type(8) {
+  font-size: 1em;        /* overall font scale for second slide */
+}
+
+.reveal .slides section:nth-of-type(8) h1,
+.reveal .slides section:nth-of-type(8) h2,
+.reveal .slides section:nth-of-type(8) h3 {
+  font-size: 1.2em;         /* slightly smaller headings */
+}
+
+.reveal .slides section:nth-of-type(8) p,
+.reveal .slides section:nth-of-type(8) li,
+.reveal .slides section:nth-of-type(8) blockquote {
+  font-size: 0.65em;        /* smaller body text */
+  line-height: 1.3;         /* tighter spacing */
+}
+
+/* --- Second slide smaller font tweak --- */
+.reveal .slides section:nth-of-type(8) {
+  font-size: 1em;        /* overall font scale for second slide */
+}
+
+.reveal .slides section:nth-of-type(8) h1,
+.reveal .slides section:nth-of-type(8) h2,
+.reveal .slides section:nth-of-type(8) h3 {
+  font-size: 1.2em;         /* slightly smaller headings */
+}
+
+.reveal .slides section:nth-of-type(8) p,
+.reveal .slides section:nth-of-type(8) li,
+.reveal .slides section:nth-of-type(8) blockquote {
+  font-size: 0.65em;        /* smaller body text */
+  line-height: 1.3;         /* tighter spacing */
+}
+
