@@ -1,0 +1,2950 @@
+---
+title: "Philadelphia Housing Price Prediction – Technical Appendix"
+author: "Zicheng Xiang"
+date: "October 24, 2025"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false  
+    df-print: paged
+execute:
+  echo: true          
+  warning: false
+  message: false
+---
+
+
+Step0
+
+
+
+```{r}
+# =========================================================
+# Step 1: Load libraries and data
+# =========================================================
+library(readr)
+library(dplyr)
+library(lubridate)
+library(here)
+library(tidyr)
+library(stringr)
+
+opa_raw <- read_csv("data/opa_properties_public.csv",
+                    na = c("", "NA", "NaN", "NULL"),
+                    guess_max = 1e6)
+
+cat("Rows (loaded):", nrow(opa_raw), "\n")
+```
+
+```{r}
+# =========================================================
+# Step 2: Data cleaning and filtering
+# =========================================================
+opa_res <- opa_raw %>%
+  mutate(
+    sale_date = as_date(sale_date),
+    # Prices are standardized as numeric values: regardless of whether they were originally numbers or strings (including $ or commas).
+    sale_price_num = suppressWarnings(
+      coalesce(as.numeric(sale_price), readr::parse_number(as.character(sale_price)))
+    ),
+    # Categories are standardized to a consistent data type.
+    cat_chr = as.character(category_code)
+  ) %>%
+  filter(
+    cat_chr %in% c("1"),  
+    sale_date >= as_date("2023-01-01"),
+    sale_date <= as_date("2024-12-31"),
+    sale_price_num >= 10000,
+    total_livable_area > 0,
+    year_built > 0,
+    number_of_bedrooms > 0,
+    number_of_bathrooms > 0,
+    !is.na(census_tract),
+    census_tract != 0,
+    census_tract != "",
+    !is.na(zip_code),
+    zip_code != "",
+    !is.na(exterior_condition),
+    exterior_condition != "",
+    !is.na(interior_condition),
+    interior_condition != "",
+    !is.na(shape),
+    shape != ""
+  ) %>%
+  select(
+    parcel_number, sale_date,
+    sale_price = sale_price_num,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract, shape
+  ) %>%
+  distinct() %>%
+  drop_na()
+
+cat("Rows (after cleaning and filtering):", nrow(opa_res), "\n")
+```
+
+```{r}
+# =========================================================
+# Step 3: Extract coordinates from shape field (using sf)
+# =========================================================
+library(sf)
+library(ggplot2)
+library(viridis)
+
+# Remove the prefix SRID=2272
+wkt <- sub("^SRID=\\d+;\\s*", "", opa_res$shape)
+
+# Convert to sf format.
+geom <- st_as_sfc(wkt, crs = 2272)
+opa_sf <- st_sf(opa_res, geometry = geom)
+
+# Extract coordinates (for scatter plot).
+coords <- st_coordinates(opa_sf)
+opa_sf$X <- coords[, 1]
+opa_sf$Y <- coords[, 2]
+
+# Debug output.
+cat("Rows with valid coordinates:", nrow(opa_sf), "\n")
+cat("Sample X coordinates:", head(opa_sf$X, 3), "\n")
+cat("Sample Y coordinates:", head(opa_sf$Y, 3), "\n")
+```
+
+```{r}
+# =========================================================
+# Step 4: Save cleaned data
+# =========================================================
+# Create output directory
+dir.create(here::here("data"), recursive = TRUE, showWarnings = FALSE)
+
+# Export data (remove the geometry column, keeping only coordinates)
+opa_export <- opa_sf %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract, x_coord = X, y_coord = Y
+  ) %>%
+  st_drop_geometry()  
+
+write_csv(opa_export, "./data/opa_sales_2023_2024_residential_clean.csv")
+
+cat("Cleaned data saved to: opa_sales_2023_2024_residential_clean.csv\n")
+cat("Final dataset contains", nrow(opa_export), "rows with", ncol(opa_export), "columns\n")
+cat("Columns:", paste(names(opa_export), collapse = ", "), "\n")
+```
+
+```{r}
+# =========================================================
+# Step 5: Load, clean crime data and calculate crime count for properties
+# =========================================================
+library(readr)
+library(dplyr)
+library(lubridate)
+library(here)
+library(tidyr)
+library(sf)
+
+# Load crime data for 2023 and 2024
+crime_2023 <- read_csv(here("./data/crime_2023.csv"), na = c("", "NA", "NaN", "NULL"), guess_max = 1e6)
+crime_2024 <- read_csv(here("./data/crime_2024.csv"), na = c("", "NA", "NaN", "NULL"), guess_max = 1e6)
+
+# Merge, clean, and process crime data
+crime_clean <- bind_rows(
+  crime_2023 %>% mutate(year = 2023),
+  crime_2024 %>% mutate(year = 2024)
+) %>%
+  mutate(
+    dispatch_date_time = as_datetime(dispatch_date_time),
+    dispatch_date = as_date(dispatch_date),
+    lat = as.numeric(lat),
+    lng = as.numeric(lng),
+    point_x = as.numeric(point_x),
+    point_y = as.numeric(point_y),
+    ucr_general = as.numeric(ucr_general),
+    text_general_code = as.character(text_general_code)
+  ) %>%
+  filter(
+    !is.na(lat) & !is.na(lng),
+    lat != 0 & lng != 0,
+    dispatch_date >= as_date("2023-01-01"),
+    dispatch_date <= as_date("2024-12-31")
+  ) %>%
+  select(
+    objectid, dc_dist, psa, dispatch_date_time, dispatch_date, 
+    dispatch_time, hour, dc_key, location_block, 
+    ucr_general, text_general_code, 
+    lat, lng, point_x, point_y, year
+  ) %>%
+  distinct() %>%
+  drop_na()
+
+# Coordinate transformation: convert from WGS84 (EPSG:4326) to EPSG:2272 coordinate system
+crime_sf <- crime_clean %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>%
+  st_transform(crs = 2272) %>%
+  mutate(
+    x_coord_2272 = st_coordinates(.)[, 1],
+    y_coord_2272 = st_coordinates(.)[, 2]
+  ) %>%
+  st_drop_geometry()
+
+# Read the cleaned real estate data
+opa_clean <- read_csv(here("./data/opa_sales_2023_2024_residential_clean.csv"))
+
+# Convert the real estate data to an sf object (EPSG:2272)
+opa_sf <- opa_clean %>%
+  st_as_sf(coords = c("x_coord", "y_coord"), crs = 2272)
+
+# Convert the crime data to an sf object (EPSG:2272)
+crime_sf_spatial <- crime_sf %>%
+  st_as_sf(coords = c("x_coord_2272", "y_coord_2272"), crs = 2272)
+
+# Create a 0.75-mile buffer around each home and count crimes (15-minute walkshed)
+opa_buffers <- st_buffer(opa_sf, dist = 3960)  # 0.75 mile = 3960 feet
+crime_count <- st_intersects(opa_buffers, crime_sf_spatial)
+
+# Add the crime counts to the real estate dataset
+opa_with_crime <- opa_clean %>%
+  mutate(
+    crime_count_15min_walk = sapply(crime_count, length)
+  )
+
+cat("Crime data processing completed:\n")
+cat("Number of 2023 crime records:", nrow(crime_2023), "\n")
+cat("Number of 2024 crime records:", nrow(crime_2024), "\n")
+cat("Number of valid crime records after cleaning:", nrow(crime_clean), "\n")
+cat("Number of records after coordinate transformation:", nrow(crime_sf), "\n")
+cat("Number of real estate records:", nrow(opa_with_crime), "\n")
+cat("Average number of crimes within a 15-minute walkshed per property:", round(mean(opa_with_crime$crime_count_15min_walk), 2), "\n")
+cat("Crime count range:", min(opa_with_crime$crime_count_15min_walk), "-", max(opa_with_crime$crime_count_15min_walk), "\n")
+
+```
+
+```{r}
+# =========================================================
+# Step 6: Add park accessibility metrics (distance in feet, keep coordinate columns)
+# =========================================================
+library(sf)
+library(dplyr)
+library(readr)
+library(here)
+
+# Use the crime data processing results from the previous step
+opa_with_crime <- opa_with_crime
+
+# Convert to an sf object (coordinate system: EPSG:2272, unit: feet)
+opa_sf <- st_as_sf(
+  opa_with_crime,
+  coords = c("x_coord", "y_coord"),
+  crs = 2272
+)
+
+cat("Number of real estate records read:", nrow(opa_sf), "\n")
+
+
+# Read and project the park data.
+parks <- st_read(here("./data/PPR_Program_Sites.geojson"), quiet = TRUE) %>%
+  st_transform(2272)
+
+# Calculate park accessibility metrics (unit: feet)
+opa_sf <- opa_sf %>%
+  mutate(
+    dist_to_park_ft = apply(st_distance(opa_sf, parks), 1, min),   
+    # Nearest park distance (feet).
+    park_within_15min_walk = lengths(st_within(opa_sf, st_buffer(parks, 3960)))  # 0.75 mile = 3960 feet
+  )
+
+# Extract coordinates to prevent st_drop_geometry from removing them
+coords <- st_coordinates(opa_sf)
+opa_sf <- opa_sf %>%
+  mutate(
+    x_coord = coords[, 1],
+    y_coord = coords[, 2]
+  )
+
+# Export data (retain coordinates and newly added indicators)
+opa_export <- opa_sf %>%
+  st_drop_geometry() %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract,
+    x_coord, y_coord,              # keep coordinates
+    crime_count_15min_walk,        # number of crimes within 15-minute walkshed
+    dist_to_park_ft,               # nearest park distance (feet)
+    park_within_15min_walk         # number of parks within 15-minute walkshed
+  )
+
+# Output summary information
+# Save the complete dataset with park accessibility indicators
+write_csv(opa_export, here("./data/opa_sales_with_parks.csv"))
+
+cat(" Park accessibility indicators added (unit: feet)\n")
+cat("  Average nearest park distance:", round(mean(opa_export$dist_to_park_ft, na.rm = TRUE), 1), "ft\n")
+cat("  Average number of parks within 15-minute walkshed:", round(mean(opa_export$park_within_15min_walk, na.rm = TRUE), 2), "\n")
+cat("  Number of fields:", ncol(opa_export), "columns (including coordinate columns)\n")
+cat("🎉 Data saved to: ./data/opa_sales_with_parks.csv\n")
+
+```
+
+```{r}
+# =========================================================
+# Step 7: Add public transit accessibility metrics
+# (distance to nearest stop & number of stops within 1,000 ft; also 15-min walkshed)
+# =========================================================
+library(sf)
+library(dplyr)
+library(readr)
+library(here)
+library(units)
+
+# Use the same CRS (EPSG:2272, units = feet)
+analysis_crs <- 2272
+
+# Read the dataset saved in the previous step (with price, crime, and park metrics)
+opa_data <- read_csv(here("./data/opa_sales_with_parks.csv"))
+opa_sf <- opa_data %>%
+  st_as_sf(coords = c("x_coord", "y_coord"), crs = analysis_crs)
+
+cat("Number of real estate records read:", nrow(opa_sf), "\n")
+
+# Read and project transit stop data
+transit_path <- here("./data/Transit_Stops_(Spring_2025).geojson")
+stopifnot(file.exists(transit_path))
+
+transit_stops <- st_read(transit_path, quiet = TRUE) %>%
+  st_transform(analysis_crs) %>%
+  suppressWarnings(st_collection_extract("POINT")) %>%
+  filter(!st_is_empty(geometry)) %>%
+  distinct(geometry, .keep_all = TRUE)
+
+cat("Number of transit stops:", nrow(transit_stops), "\n")
+
+# Compute accessibility metrics (units: feet)
+# Distance to nearest transit stop
+nearest_idx <- st_nearest_feature(opa_sf, transit_stops)
+dist_ft <- st_distance(opa_sf, transit_stops[nearest_idx, ], by_element = TRUE)
+opa_sf$dist_transit_ft <- as.numeric(set_units(dist_ft, "ft"))
+
+# Count of transit stops within a 15-minute walkshed (0.75 mile = 3960 ft)
+buffer_3960ft <- st_buffer(opa_sf, dist = 3960)
+opa_sf$transit_15min_walk <- lengths(st_intersects(buffer_3960ft, transit_stops))
+
+# (Optional) Count of transit stops within 1,000 ft
+buffer_1000ft <- st_buffer(opa_sf, dist = 1000)
+opa_sf$transit_within_1000ft <- lengths(st_intersects(buffer_1000ft, transit_stops))
+
+# Extract coordinates so st_drop_geometry does not remove them
+coords <- st_coordinates(opa_sf)
+opa_sf <- opa_sf %>%
+  mutate(
+    x_coord = coords[, 1],
+    y_coord = coords[, 2]
+  )
+
+# Export results (retain coordinates and newly added indicators)
+opa_export <- opa_sf %>%
+  st_drop_geometry() %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract,
+    x_coord, y_coord,                 # keep coordinates
+    crime_count_15min_walk,           # crime metric
+    dist_to_park_ft, park_within_15min_walk, # park metrics
+    dist_transit_ft, transit_15min_walk,     # transit metrics (walkshed)
+    transit_within_1000ft                    # transit stops within 1,000 ft
+  )
+
+# Output summary information
+# Save the complete dataset with transit metrics
+write_csv(opa_export, here("./data/opa_sales_with_transit.csv"))
+
+cat("  Public transit metrics added\n")
+cat("  Average distance to nearest transit stop:", round(mean(opa_export$dist_transit_ft, na.rm = TRUE), 1), "ft\n")
+cat("  Average number of transit stops within 15-minute walkshed:", round(mean(opa_export$transit_15min_walk, na.rm = TRUE), 2), "\n")
+cat("  Average number of transit stops within 1,000 ft:", round(mean(opa_export$transit_within_1000ft, na.rm = TRUE), 2), "\n")
+cat("  Number of fields:", ncol(opa_export), "columns (including coordinate columns)\n")
+cat("🎉 Data saved to: ./data/opa_sales_with_transit.csv\n")
+
+
+```
+
+```{r}
+# =========================================================
+# Step 8: Add hospital accessibility metrics
+# (distance to nearest hospital & count within 0.75-mile walkshed)
+# =========================================================
+library(sf)
+library(dplyr)
+library(readr)
+library(here)
+
+# CRS: EPSG:2272 (units: feet)
+analysis_crs <- 2272
+
+# Read the dataset saved in the previous step (with price, crime, park, and transit metrics)
+opa_data <- read_csv(here("./data/opa_sales_with_transit.csv"))
+opa_sf <- opa_data %>%
+  st_as_sf(coords = c("x_coord", "y_coord"), crs = analysis_crs)
+
+cat("Number of real estate records read:", nrow(opa_sf), "\n")
+
+# Read hospital data and project to the same CRS
+hospitals <- st_read(here("./data/Hospitals.geojson"), quiet = TRUE) %>%
+  st_transform(analysis_crs)
+
+cat("Number of hospitals:", nrow(hospitals), "\n")
+
+# Compute hospital accessibility metrics (units: feet)
+opa_sf <- opa_sf %>%
+  mutate(
+    # Distance to nearest hospital (feet)
+    dist_to_hospital_ft = as.numeric(apply(st_distance(opa_sf, hospitals), 1, min)),
+    # Number of hospitals within a 15-minute walkshed (0.75 mile = 3960 ft)
+    hospitals_15min_walk = lengths(st_within(opa_sf, st_buffer(hospitals, 3960)))
+  )
+
+# Extract coordinates so st_drop_geometry does not remove them
+coords <- st_coordinates(opa_sf)
+opa_sf <- opa_sf %>%
+  mutate(
+    x_coord = coords[, 1],
+    y_coord = coords[, 2]
+  )
+
+# Export results (retain coordinates and all features)
+opa_export <- opa_sf %>%
+  st_drop_geometry() %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract,
+    x_coord, y_coord,                         # keep coordinates
+    crime_count_15min_walk,                   # crime metrics
+    dist_to_park_ft, park_within_15min_walk,  # park metrics
+    dist_transit_ft, transit_15min_walk,      # transit metrics
+    dist_to_hospital_ft, hospitals_15min_walk # hospital metrics (new)
+  )
+
+# Output summary information
+# Save the complete dataset with hospital metrics
+write_csv(opa_export, here("./data/opa_sales_with_hospitals.csv"))
+
+cat("  Hospital accessibility metrics added\n")
+cat("  Average distance to nearest hospital:", round(mean(opa_export$dist_to_hospital_ft, na.rm = TRUE), 1), "ft\n")
+cat("  Average number of hospitals within 15-minute walkshed:", round(mean(opa_export$hospitals_15min_walk, na.rm = TRUE), 2), "\n")
+cat("  Number of fields:", ncol(opa_export), "columns (including coordinate columns)\n")
+cat("  Includes all features: real estate info + crime + park + transit + hospital\n")
+cat("  Data saved to: ./data/opa_sales_with_hospitals.csv\n")
+
+
+```
+
+```{r}
+# =========================================================
+# Step 9: Enrich with ACS (Census) Socioeconomic Indicators
+# =========================================================
+library(sf)
+library(dplyr)
+library(tidycensus)
+library(readr)
+library(here)
+
+# ---------------------------------------------------------
+# Read the final property data (includes all accessibility metrics)
+# ---------------------------------------------------------
+opa_final <- read_csv(here("./data/opa_sales_with_hospitals.csv"))
+
+# Convert to sf object (ensure CRS is EPSG:2272)
+opa_sf <- opa_final %>%
+  st_as_sf(coords = c("x_coord", "y_coord"), crs = 2272, remove = FALSE)
+
+cat("Number of property records read:", nrow(opa_sf), "\n")
+
+# ---------------------------------------------------------
+# Download ACS data for Philadelphia (year can be changed)
+# ---------------------------------------------------------
+year_acs <- 2022
+census_api_key("86993dedbe98d77b9d79db6b8ba21a7fde55cb91", install = FALSE)
+
+acs_vars <- c(
+  total_pop      = "B01003_001",
+  median_income  = "B19013_001",
+  per_cap_income = "B19301_001",
+  below_pov      = "B17001_002",
+  edu_total25    = "B15003_001",
+  edu_bach       = "B15003_022",
+  edu_mast       = "B15003_023",
+  edu_prof       = "B15003_024",
+  edu_phd        = "B15003_025"
+)
+
+phl_acs <- get_acs(
+  geography = "tract",
+  state = "PA",
+  county = "Philadelphia",
+  year = year_acs,
+  geometry = TRUE,
+  output = "wide",
+  variables = acs_vars
+) %>%
+  mutate(
+    PCBACHMORE = 100 * ((edu_bachE + edu_mastE + edu_profE + edu_phdE) / edu_total25E),
+    PCTPOVERTY = 100 * (below_povE / total_popE)
+  ) %>%
+  select(geometry, GEOID, total_popE, median_incomeE, per_cap_incomeE, PCBACHMORE, PCTPOVERTY)
+
+# ---------------------------------------------------------
+# Reproject to align (EPSG:2272)
+# ---------------------------------------------------------
+phl_acs <- st_transform(phl_acs, 2272)
+
+# ---------------------------------------------------------
+# Spatial join: assign each home to the tract it falls within
+# ---------------------------------------------------------
+opa_joined <- st_join(
+  opa_sf,
+  phl_acs,
+  join = st_within,
+  left = TRUE
+)
+
+# ---------------------------------------------------------
+# For out-of-bound samples (occasional NAs), fill with nearest tract
+# ---------------------------------------------------------
+missing <- is.na(opa_joined$median_incomeE)
+if (any(missing)) {
+  idx <- st_nearest_feature(opa_joined[missing, ], phl_acs)
+  repl <- phl_acs[idx, ] %>% st_drop_geometry()
+  cols <- names(repl)
+  opa_joined[missing, cols] <- repl
+}
+
+# ---------------------------------------------------------
+# Export results
+# ---------------------------------------------------------
+opa_export <- opa_joined %>%
+  st_drop_geometry() %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract,
+    x_coord, y_coord,
+    crime_count_15min_walk,                  # crime
+    dist_to_park_ft, park_within_15min_walk, # parks
+    dist_transit_ft, transit_15min_walk,     # transit
+    dist_to_hospital_ft, hospitals_15min_walk, # hospitals
+    total_popE, median_incomeE, per_cap_incomeE, PCBACHMORE, PCTPOVERTY  # ACS
+  )
+
+# Save the complete dataset with Census indicators
+write_csv(opa_export, here("opa_sales_final_complete.csv"))
+
+cat("  ACS socioeconomic indicators added\n")
+cat("  Mean household income (USD):", round(mean(opa_export$median_incomeE, na.rm = TRUE), 0), "\n")
+cat("  Mean poverty rate (%):", round(mean(opa_export$PCTPOVERTY, na.rm = TRUE), 2), "\n")
+cat("  Mean share with bachelor's degree or higher (%):", round(mean(opa_export$PCBACHMORE, na.rm = TRUE), 2), "\n")
+cat("  Includes all features: price + crime + parks + transit + hospitals + socioeconomic\n")
+cat("  Data saved to: opa_sales_final_complete.csv\n")
+
+
+```
+
+```{r}
+# =========================================================
+# Step 10: Add Education Accessibility Indicators (Schools)
+# =========================================================
+library(sf)
+library(dplyr)
+library(readr)
+library(here)
+library(units)
+
+# ---------------------------------------------------------
+# 1.Read the complete dataset saved from the previous step (including Census and accessibility features)
+# ---------------------------------------------------------
+opa_data <- read_csv(here("opa_sales_final_complete.csv"))
+opa_sf <- opa_data %>%
+  st_as_sf(coords = c("x_coord", "y_coord"), crs = 2272, remove = FALSE)
+
+cat("Number of property records read:", nrow(opa_sf), "\n")
+cat("Data column names:", paste(names(opa_sf), collapse = ", "), "\n")
+
+# ---------------------------------------------------------
+# 2.Read the school data (only one file)）
+# ---------------------------------------------------------
+schools <- st_read(here("./data/Schools_Parcels.geojson"), quiet = TRUE) %>%
+  st_transform(2272) %>%
+  filter(!st_is_empty(geometry))  
+
+cat("School data loaded:", nrow(schools), "records\n")
+cat("School data coordinate system:", st_crs(schools)$input, "\n")
+cat("Property data coordinate system:", st_crs(opa_sf)$input, "\n")
+
+# ---------------------------------------------------------
+# 3.Calculate education accessibility indicators
+# ---------------------------------------------------------
+# Distance to the nearest school (in feet)
+cat("Starting to calculate the nearest school distance...\n")
+dist_matrix <- st_distance(opa_sf, schools)
+cat("Distance matrix dimensions:", dim(dist_matrix), "\n")
+opa_sf$dist_to_nearest_school_ft <- as.numeric(apply(dist_matrix, 1, min))
+cat("Nearest school distance calculation completed, range:",
+    min(opa_sf$dist_to_nearest_school_ft), "-", 
+    max(opa_sf$dist_to_nearest_school_ft), "feet\n")
+
+# Number of schools within a 15-minute walking distance
+cat("Starting to calculate the number of schools within a 15-minute walking distance...\n")
+buffer_3960ft <- st_buffer(opa_sf, dist = 3960)  # 0.75 mile = 3960 feet
+opa_sf$schools_within_15min_walk <- lengths(st_intersects(buffer_3960ft, schools))
+cat("Calculation of schools within a 15-minute walking distance completed, range:",
+    min(opa_sf$schools_within_15min_walk), "-", 
+    max(opa_sf$schools_within_15min_walk), "\n")
+
+
+# ---------------------------------------------------------
+# 4.Extract coordinates and retain all columns
+# ---------------------------------------------------------
+coords <- st_coordinates(opa_sf)
+opa_sf <- opa_sf %>%
+  mutate(
+    x_coord = coords[, 1],
+    y_coord = coords[, 2]
+  )
+
+# ---------------------------------------------------------
+# 5.Export the complete table with education accessibility indicators
+# ---------------------------------------------------------
+opa_export <- opa_sf %>%
+  st_drop_geometry() %>%
+  select(
+    parcel_number, sale_date, sale_price,
+    number_of_bedrooms, number_of_bathrooms,
+    total_livable_area, year_built,
+    zip_code, category_code,
+    exterior_condition, interior_condition,
+    census_tract,
+    x_coord, y_coord,
+    crime_count_15min_walk,                  
+    dist_to_park_ft, park_within_15min_walk, 
+    dist_transit_ft, transit_15min_walk,     
+    dist_to_hospital_ft, hospitals_15min_walk, 
+    total_popE, median_incomeE, per_cap_incomeE, PCBACHMORE, PCTPOVERTY,  # Census
+    dist_to_nearest_school_ft, schools_within_15min_walk                  
+  )
+
+# ---------------------------------------------------------
+# 6.Clean the data: remove all rows containing empty or NA values
+# ---------------------------------------------------------
+rows_before <- nrow(opa_export)
+
+opa_export <- opa_export %>%
+  mutate(across(everything(), ~ {
+    if (is.character(.x)) {
+      clean_val <- trimws(tolower(as.character(.x)))
+      ifelse(clean_val == "" | clean_val == "na" | clean_val == "n/a" | clean_val == "null", 
+             NA, .x)
+    } else {
+      .x
+    }
+  })) %>%
+  drop_na()
+
+rows_after <- nrow(opa_export)
+rows_removed <- rows_before - rows_after
+
+write_csv(opa_export, here("opa_sales_final_complete.csv"))
+
+cat("  Education accessibility indicators have been added\n")
+cat("  Average distance to the nearest school:", 
+    round(mean(opa_export$dist_to_nearest_school_ft, na.rm = TRUE), 1), "ft\n")
+cat("  Average number of schools within a 15-minute walking distance:", 
+    round(mean(opa_export$schools_within_15min_walk, na.rm = TRUE), 2), "\n")
+cat("  Data cleaning completed: removed", rows_removed, "rows containing empty or NA values\n")
+cat("  Before cleaning:", rows_before, "rows → After cleaning:", rows_after, "rows\n")
+cat("  Final complete dataset saved to: opa_sales_final_complete.csv\n")
+cat("  Includes all features: housing price + crime + parks + transit + hospitals + Census + schools\n")
+cat("  Number of columns:", ncol(opa_export), "(including coordinate columns)\n")
+
+
+```
+
+
+
+
+
+Step1
+
+
+
+
+```{r}
+# =========================================================
+# Step 1: Skewness Detection + Log Transformation + Descriptive Statistics
+# =========================================================
+
+library(dplyr)
+library(ggplot2)
+library(e1071)
+library(patchwork)
+library(readr)
+library(tidyr)
+
+set.seed(2025)
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("📊 Step 1: Data Cleaning, Transformation, and Descriptive Statistics\n")
+cat(rep("=", 80), "\n\n")
+
+# === Read Data ===
+df <- read_csv("opa_sales_final_complete.csv", show_col_types = FALSE)
+cat(sprintf("Original sample size: %d\n", nrow(df)))
+cat(sprintf("Number of variables: %d\n\n", ncol(df)))
+
+
+# === Basic Processing ===
+if ("year_built" %in% names(df)) {
+  df <- df %>%
+    mutate(age = 2025 - year_built,
+           age2 = age^2) %>%
+    dplyr::select(-year_built)
+}
+
+cat_vars <- c("interior_condition", "exterior_condition", "zip_code", "census_tract")
+coord_vars <- c("x_coord", "y_coord")
+df[cat_vars] <- lapply(df[cat_vars], factor)
+
+# === Skewness Detection ===
+cat("=== Skewness Detection ===\n")
+num_vars <- df %>% dplyr::select(where(is.numeric))
+skews <- sapply(num_vars, function(x) {
+  if (all(is.na(x)) || sd(x, na.rm = TRUE) == 0) return(0)
+  skewness(x, na.rm = TRUE)
+})
+logged_vars <- names(skews[abs(skews) > 1])
+cat(sprintf("Variables with |skew| > 1: %d\n", length(logged_vars)))
+
+# === Apply log1p Transformation ===
+df_trans <- df
+for (v in logged_vars) {
+  df_trans[[v]] <- log1p(pmax(df[[v]], 0))
+}
+
+```
+
+```{r}
+# =========================================================
+# 1. Descriptive Statistics Table
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Generating Descriptive Statistics Table ===\n\n")
+
+# Identify target variable
+y_var <- case_when(
+  "sale_price_log" %in% names(df_trans) ~ "sale_price_log",
+  "log_sale_price" %in% names(df_trans) ~ "log_sale_price",
+  "sale_price" %in% names(df_trans) ~ "sale_price",
+  TRUE ~ NA_character_
+)
+
+# Select key numeric variables
+key_vars <- c(
+  y_var,
+  "total_livable_area", "number_of_bedrooms", "number_of_bathrooms", "age",
+  "median_incomeE", "per_cap_incomeE", "PCTPOVERTY", "PCBACHMORE"
+)
+key_vars <- intersect(key_vars, names(df_trans))
+
+if (length(key_vars) > 0) {
+  # Compute descriptive statistics (more meaningful on pre-transformation data)
+  desc_stats <- df %>%
+    dplyr::select(all_of(key_vars)) %>%
+    summarise(across(everything(), list(
+      N = ~sum(!is.na(.)),
+      Mean = ~mean(., na.rm = TRUE),
+      SD = ~sd(., na.rm = TRUE),
+      Min = ~min(., na.rm = TRUE),
+      Q25 = ~quantile(., 0.25, na.rm = TRUE),
+      Median = ~median(., na.rm = TRUE),
+      Q75 = ~quantile(., 0.75, na.rm = TRUE),
+      Max = ~max(., na.rm = TRUE)
+    ), .names = "{.col}_{.fn}")) %>%
+    pivot_longer(everything(), names_to = "stat", values_to = "value") %>%
+    separate(stat, into = c("Variable", "Statistic"), sep = "_(?=[^_]+$)") %>%
+    pivot_wider(names_from = Statistic, values_from = value) %>%
+    dplyr::select(Variable, N, Mean, SD, Min, Q25, Median, Q75, Max) %>%
+    mutate(across(c(Mean, SD, Min, Q25, Median, Q75, Max), ~round(., 3)))
+  
+  if (!dir.exists("file")) dir.create("file")
+  write_csv(desc_stats, "file/descriptive_statistics.csv")
+  cat("  ✓ file/descriptive_statistics.csv\n")
+  print(as.data.frame(desc_stats), row.names = FALSE)
+}
+
+
+```
+
+```{r}
+# =========================================================
+# 2. Distribution Plots
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Generating distribution comparison plots ===\n\n")
+
+plot_list <- lapply(names(num_vars), function(v) {
+  is_transformed <- v %in% logged_vars
+  
+  # Original distribution
+  p1 <- ggplot(df, aes(x = !!sym(v))) +
+    geom_histogram(bins = 30, fill = "#053061", color = "white", alpha = 0.85) +
+    labs(title = paste0(v, " (Original)"), x = NULL, y = "Count") +
+    theme_minimal(base_size = 9) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "#E5E5E5", linewidth = 0.3),
+      axis.text = element_text(size = 7),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+  
+  # Transformed distribution
+  fill_color <- if (is_transformed) "#67001F" else "#4393C3"
+  
+  p2 <- ggplot(df_trans, aes(x = !!sym(v))) +
+    geom_histogram(bins = 30, fill = fill_color, color = "white", alpha = 0.85) +
+    labs(
+      title = paste0(v, if (is_transformed) " (Log-transformed)" else " (No transformation)"),
+      x = NULL, y = "Count"
+    ) +
+    theme_minimal(base_size = 9) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 9),
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "#E5E5E5", linewidth = 0.3),
+      axis.text = element_text(size = 7),
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+  
+  # Add skewness annotation
+  skew_val <- round(skews[v], 2)
+  p1 <- p1 + annotate("text", x = Inf, y = Inf, 
+                      label = paste0("Skewness: ", skew_val),
+                      hjust = 1.1, vjust = 1.5, size = 2.5, color = "gray30")
+  
+  pair_plot <- (p1 | p2) + plot_layout(widths = c(1, 1)) &
+    theme(plot.margin = margin(3, 3, 3, 3))
+  
+  wrap_elements(pair_plot) + 
+    theme(
+      plot.background = element_rect(fill = "white", color = "#B0B0B0", linewidth = 1.2),
+      plot.margin = margin(6, 6, 6, 6)
+    )
+})
+
+all_plot <- wrap_plots(plot_list, ncol = 2) + 
+  plot_annotation(
+    title = "Variable Distributions: Original vs. Transformed",
+    subtitle = paste0(
+      "Dark Blue = Original | Dark Red = Log-transformed (|skew| > 1) | Medium Blue = No transformation"
+    ),
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray30"),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+  )
+
+```
+
+```{r}
+# Skewness Summary Plot
+skew_df <- data.frame(
+  variable = names(skews),
+  skewness = skews,
+  transformed = names(skews) %in% logged_vars
+) %>% arrange(desc(abs(skewness)))
+
+p_skew <- ggplot(skew_df, aes(x = reorder(variable, abs(skewness)), y = skewness, fill = transformed)) +
+  geom_col(alpha = 0.85) +
+  geom_hline(yintercept = c(-1, 1), linetype = "dashed", color = "#67001F", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "gray50", linewidth = 0.5) +
+  scale_fill_manual(
+    values = c("FALSE" = "#053061", "TRUE" = "#67001F"),
+    labels = c("FALSE" = "No transformation", "TRUE" = "Log-transformed"),
+    name = NULL
+  ) +
+  coord_flip() +
+  labs(
+    title = "Skewness of All Variables",
+    subtitle = "Variables with |skewness| > 1 are log-transformed",
+    x = "Variable", y = "Skewness",
+    caption = "Dashed lines indicate skewness thresholds at ±1"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    panel.grid.major.y = element_blank(),
+    legend.position = "bottom",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+```
+
+```{r}
+# =========================================================
+# 3. Categorical Variable Distribution Plots
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Generating categorical variable distribution plots ===\n\n")
+
+cat_vars_viz <- c("interior_condition", "exterior_condition")
+cat_vars_viz <- intersect(cat_vars_viz, names(df_trans))
+
+if (length(cat_vars_viz) > 0 && !is.na(y_var)) {
+  plot_list_cat <- list()
+  
+  for (var in cat_vars_viz) {
+    cat_summary <- df_trans %>%
+      group_by(!!sym(var)) %>%
+      summarise(
+        count = n(),
+        mean_price = mean(.data[[y_var]], na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      filter(!is.na(!!sym(var))) %>%
+      arrange(desc(mean_price))
+    
+    if (nrow(cat_summary) > 0) {
+      p <- ggplot(cat_summary, aes(reorder(!!sym(var), mean_price), mean_price, fill = mean_price)) +
+        geom_col(alpha = 0.9) +
+        geom_text(aes(label = count), vjust = -0.5, size = 3) +
+        scale_fill_gradient2(
+          low = "#053061", mid = "#F7F7F7", high = "#67001F",
+          midpoint = median(cat_summary$mean_price, na.rm = TRUE),
+          guide = "none"
+        ) +
+        coord_flip() +
+        theme_minimal(base_size = 10) +
+        theme(
+          panel.grid.major.y = element_blank(),
+          plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+          plot.background = element_rect(fill = "white", color = NA),
+          panel.background = element_rect(fill = "white", color = NA)
+        ) +
+        labs(
+          title = gsub("_", " ", toupper(var)),
+          x = NULL,
+          y = "Average Sale Price (log)",
+          caption = "Numbers indicate the count in each category"
+        )
+      
+      plot_list_cat[[var]] <- p
+    }
+  }
+  
+  if (length(plot_list_cat) > 0) {
+    p_cat_combined <- wrap_plots(plot_list_cat, ncol = 2) +
+      plot_annotation(
+        title = "Average Sale Price by Property Condition",
+        subtitle = "Log-transformed sale prices",
+        theme = theme(
+          plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(size = 11, hjust = 0.5),
+          plot.background = element_rect(fill = "white", color = NA)
+        )
+      )
+    
+    if (!dir.exists("plot")) dir.create("plot")
+    ggsave("plot/categorical_price_comparison.png", p_cat_combined,
+           width = 12, height = 6, dpi = 300, bg = "white")
+    cat("  ✓ plot/categorical_price_comparison.png\n")
+  }
+}
+```
+
+```{r}
+# =========================================================
+# Output Files
+# =========================================================
+
+if (!dir.exists("plot")) dir.create("plot")
+if (!dir.exists("file")) dir.create("file")
+
+ggsave("plot/all_variables_distribution.png", plot = all_plot, width = 20, height = 12, dpi = 300, bg = "white")
+ggsave("plot/skewness_summary.png", plot = p_skew, width = 10, height = 8, dpi = 300, bg = "white")
+writeLines(logged_vars, "file/logged_variables.txt")
+write_csv(df_trans, "file/opa_sales_step1_clean.csv")
+
+transform_summary <- data.frame(
+  Variable = names(skews),
+  Original_Skewness = round(skews, 3),
+  Transformed = names(skews) %in% logged_vars
+) %>% arrange(desc(abs(Original_Skewness)))
+
+write_csv(transform_summary, "file/transformation_summary.csv")
+
+# =========================================================
+# Summary
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat(" Step 1 Completed\n")
+cat(rep("=", 80), "\n\n")
+
+cat(" Output Files:\n\n")
+cat("Tables:\n")
+cat("  • file/descriptive_statistics.csv - Descriptive statistics\n")
+cat("  • file/transformation_summary.csv - Transformation summary\n")
+cat("  • file/logged_variables.txt - List of log-transformed variables\n")
+cat("  • file/opa_sales_step1_clean.csv - Cleaned dataset\n\n")
+
+cat("Figures:\n")
+cat("  • plot/all_variables_distribution.png - All variables: original vs. transformed\n")
+cat("  • plot/skewness_summary.png - Skewness summary\n")
+cat("  • plot/categorical_price_comparison.png - Categorical variables vs. sale price\n\n")
+
+cat("📈 Stats:\n")
+cat(sprintf("  • Variables with |skew| > 1: %d\n", length(logged_vars)))
+cat(sprintf("  • Final number of variables: %d\n", ncol(df_trans)))
+cat(sprintf("  • Final sample size: %d\n\n", nrow(df_trans)))
+
+```
+
+
+
+Step2
+
+
+
+
+```{r}
+# =========================================================
+# Step 2 Enhanced: Correlation Matrix + VIF + Spatial Visualization + Scatterplots
+# =========================================================
+
+library(dplyr)
+library(ggplot2)
+library(car)
+library(reshape2)
+library(readr)
+library(patchwork)
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("  Step 2: Correlation Analysis, Multicollinearity, and Spatial Exploration\n")
+cat(rep("=", 80), "\n\n")
+
+# === Read Data ===
+df <- read_csv("file/opa_sales_step1_clean.csv", show_col_types = FALSE)
+
+cat(sprintf("Sample size: %d\n", nrow(df)))
+cat(sprintf("Number of variables: %d\n\n", ncol(df)))
+
+# === Auto-detect target variable ===
+y_var <- case_when(
+  "sale_price_log" %in% names(df) ~ "sale_price_log",
+  "log_sale_price" %in% names(df) ~ "log_sale_price",
+  "sale_price" %in% names(df) ~ "sale_price",
+  TRUE ~ NA_character_
+)
+if (is.na(y_var)) stop(" Target variable not found")
+
+cat_vars <- intersect(c("interior_condition", "exterior_condition", "zip_code", "census_tract"), names(df))
+coord_vars <- intersect(c("x_coord", "y_coord"), names(df))
+df[cat_vars] <- lapply(df[cat_vars], factor)
+
+```
+
+```{r}
+# =========================================================
+# 1. Correlation Matrix
+# =========================================================
+
+cat("=== Generating correlation matrix ===\n")
+
+num_df <- df %>% dplyr::select(where(is.numeric))
+num_df <- num_df[, sapply(num_df, function(x) sd(x, na.rm = TRUE) > 0), drop = FALSE]
+
+if (ncol(num_df) > 1) {
+  corr_mat <- cor(num_df, use = "pairwise.complete.obs")
+  corr_mat[upper.tri(corr_mat)] <- NA
+  corr_melt <- melt(corr_mat, na.rm = TRUE)
+  
+  # If there are too many variables, keep only the first 50
+  if (ncol(num_df) > 50) {
+    vars_top <- names(num_df)[1:50]
+    corr_melt <- corr_melt %>% filter(Var1 %in% vars_top & Var2 %in% vars_top)
+  }
+  
+  p_corr <- ggplot(corr_melt, aes(Var2, Var1, fill = value, size = abs(value))) +
+    geom_point(shape = 21, color = "white", stroke = 0.5) +
+    scale_fill_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = 0, limits = c(-1, 1), name = NULL,
+      breaks = seq(-1, 1, 0.2)
+    ) +
+    scale_size_continuous(range = c(0.5, 10), guide = "none") +
+    scale_x_discrete(position = "top") +
+    scale_y_discrete(limits = rev) +
+    theme_minimal(base_size = 11) +
+    theme(
+      axis.text.x.top = element_text(angle = 45, hjust = 0, vjust = 0, size = 9, color = "black"),
+      axis.text.y = element_text(size = 9, color = "black"),
+      axis.title = element_blank(),
+      panel.grid.major = element_line(color = "#E0E0E0", linewidth = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.background = element_rect(fill = "white", color = NA),
+      plot.background = element_rect(fill = "white", color = NA),
+      legend.position = "bottom",
+      legend.direction = "horizontal",
+      legend.key.width = unit(3, "cm"),
+      legend.key.height = unit(0.4, "cm"),
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+      plot.margin = margin(10, 10, 10, 10)
+    ) +
+    labs(title = "Correlation Matrix") +
+    coord_fixed()
+  
+  if (!dir.exists("plot")) dir.create("plot", recursive = TRUE)
+  ggsave("plot/corr_matrix_enhanced.png", p_corr, width = 12, height = 10, dpi = 300, bg = "white")
+  cat("   plot/corr_matrix_enhanced.png\n")
+}
+
+```
+
+```{r}
+# =========================================================
+# 2. VIF Analysis
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== VIF Analysis ===\n\n")
+
+vif_vars <- setdiff(names(df), c(y_var, cat_vars, coord_vars))
+num_vif <- df %>% dplyr::select(all_of(vif_vars)) %>% dplyr::select(where(is.numeric))
+num_vif <- num_vif[, sapply(num_vif, function(x) sd(x, na.rm = TRUE) > 0), drop = FALSE]
+
+if (ncol(num_vif) >= 2) {
+  df_vif <- df %>% dplyr::select(all_of(c(y_var, names(num_vif)))) %>% na.omit()
+  f_vif <- as.formula(paste(y_var, "~ ."))
+  vif_model <- lm(f_vif, data = df_vif)
+  vif_vals <- car::vif(vif_model)
+  vif_tbl <- data.frame(variable = names(vif_vals), VIF = round(vif_vals, 3))
+  vif_tbl <- vif_tbl %>% arrange(desc(VIF))
+  
+  if (!dir.exists("file")) dir.create("file", recursive = TRUE)
+  write_csv(vif_tbl, "file/vif_values.csv")
+  cat("  ✓ file/vif_values.csv\n")
+  
+  # High VIF warning
+  high_vif <- vif_tbl %>% filter(VIF > 10)
+  if (nrow(high_vif) > 0) {
+    cat("\n  Variables with high multicollinearity (VIF > 10):\n")
+    print(as.data.frame(high_vif), row.names = FALSE)
+  }
+  
+  # VIF visualization
+  vif_top20 <- vif_tbl %>% top_n(20, VIF)
+  
+  p_vif <- ggplot(vif_top20, aes(x = reorder(variable, VIF), y = VIF, fill = VIF)) +
+    geom_col(alpha = 0.9) +
+    scale_fill_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = 5, name = "VIF Value"
+    ) +
+    geom_hline(yintercept = 10, linetype = "dashed", color = "#67001F", linewidth = 1) +
+    geom_hline(yintercept = 5, linetype = "dashed", color = "gray50", linewidth = 0.7) +
+    coord_flip() +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(
+      title = "Variance Inflation Factor (VIF) - Top 20",
+      subtitle = "Color gradient: Blue (low VIF) → Red (high VIF)",
+      x = "Variable", y = "VIF Value",
+      caption = "Dark red line: VIF=10 (High multicollinearity) | Gray line: VIF=5 (Moderate)"
+    )
+  
+  ggsave("plot/vif_analysis.png", p_vif, width = 10, height = 8, dpi = 300, bg = "white")
+  cat("   plot/vif_analysis.png\n")
+}
+
+```
+
+```{r}
+# =========================================================
+# 3. Spatial Visualization
+# =========================================================
+
+if (all(c("x_coord", "y_coord") %in% names(df))) {
+  cat("\n", rep("=", 80), "\n", sep = "")
+  cat("=== Spatial Distribution Visualization ===\n\n")
+  
+  # 3.1 Spatial distribution of sale prices
+  p_spatial_price <- ggplot(df, aes(x_coord, y_coord, color = .data[[y_var]])) +
+    geom_point(alpha = 0.6, size = 0.8) +
+    scale_color_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = median(df[[y_var]], na.rm = TRUE),
+      name = "Sale Price\n(log)"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 11),
+      plot.background = element_rect(fill = "white", color = NA),
+      legend.position = "right"
+    ) +
+    labs(
+      title = "Spatial Distribution of Sale Prices",
+      subtitle = "Philadelphia housing market",
+      x = "X Coordinate", y = "Y Coordinate"
+    )
+  
+  ggsave("plot/spatial_price_distribution.png", p_spatial_price,
+         width = 10, height = 8, dpi = 300, bg = "white")
+  cat("   plot/spatial_price_distribution.png\n")
+  
+  # 3.2 Hexbin density map
+  p_hex <- ggplot(df, aes(x_coord, y_coord)) +
+    geom_hex(aes(fill = after_stat(count)), bins = 40) +
+    scale_fill_gradient(
+      low = "#F7F7F7", high = "#67001F",
+      name = "Count"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 11),
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(
+      title = "Housing Density Heatmap",
+      subtitle = "Hexagonal binning of property locations",
+      x = "X Coordinate", y = "Y Coordinate"
+    )
+  
+  ggsave("plot/spatial_density_hexbin.png", p_hex,
+         width = 10, height = 8, dpi = 300, bg = "white")
+  cat("   plot/spatial_density_hexbin.png\n")
+}
+```
+
+```{r}
+# =========================================================
+# 4. Key Variable Scatterplots
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Scatterplots: Key Variables vs. Sale Price ===\n\n")
+
+key_numeric <- c("total_livable_area", "median_incomeE", "age", "number_of_bathrooms")
+key_numeric <- intersect(key_numeric, names(df))
+
+if (length(key_numeric) >= 4) {
+  scatter_plots <- list()
+  
+  for (var in key_numeric[1:4]) {
+    # Correlation coefficient
+    corr_val <- cor(df[[var]], df[[y_var]], use = "pairwise.complete.obs")
+    
+    p <- ggplot(df, aes(.data[[var]], .data[[y_var]])) +
+      geom_point(alpha = 0.3, size = 0.8, color = "#053061") +
+      geom_smooth(method = "lm", se = TRUE, color = "#67001F", linewidth = 1.2) +
+      annotate("text", x = Inf, y = -Inf, 
+               label = sprintf("r = %.3f", corr_val),
+               hjust = 1.1, vjust = -0.5, size = 4, color = "#67001F", fontface = "bold") +
+      theme_minimal(base_size = 10) +
+      theme(
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 11),
+        plot.background = element_rect(fill = "white", color = NA)
+      ) +
+      labs(
+        title = gsub("_", " ", var),
+        x = gsub("_", " ", var),
+        y = "Sale Price (log)"
+      )
+    
+    scatter_plots[[var]] <- p
+  }
+  
+  p_scatter <- wrap_plots(scatter_plots, ncol = 2) +
+    plot_annotation(
+      title = "Key Variables vs. Sale Price",
+      subtitle = "Linear fit (OLS) with correlation coefficients",
+      theme = theme(
+        plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 11, hjust = 0.5),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
+    )
+  
+  ggsave("plot/key_variables_scatter.png", p_scatter,
+         width = 12, height = 10, dpi = 300, bg = "white")
+  cat("   plot/key_variables_scatter.png\n")
+}
+
+```
+
+
+```{r}
+# =========================================================
+# Save cleaned data
+# =========================================================
+
+write_csv(df, "file/opa_sales_step2_clean.csv")
+
+# =========================================================
+# Summary
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("  Step 2 Completed\n")
+cat(rep("=", 80), "\n\n")
+
+cat("  Output files:\n\n")
+cat("Tables:\n")
+cat("  • file/vif_values.csv - VIF analysis results\n")
+cat("  • file/opa_sales_step2_clean.csv - Cleaned dataset\n\n")
+
+cat("Figures:\n")
+cat("  • plot/corr_matrix_enhanced.png - Correlation matrix\n")
+cat("  • plot/vif_analysis.png - VIF analysis\n")
+if (all(c("x_coord", "y_coord") %in% names(df))) {
+  cat("  • plot/spatial_price_distribution.png - Spatial distribution of sale prices\n")
+  cat("  • plot/spatial_density_hexbin.png - Housing density heatmap\n")
+}
+if (length(key_numeric) >= 4) {
+  cat("  • plot/key_variables_scatter.png - Key variables vs. sale price (scatterplots)\n")
+}
+cat("\n")
+```
+
+
+
+
+
+Step3
+
+
+
+
+
+```{r}
+# =========================================================
+# Step 3: VIF-based Filtering + LASSO Feature Selection (Streamlined)
+# =========================================================
+
+library(glmnet)
+library(dplyr)
+library(readr)
+library(ggplot2)
+
+set.seed(2025)
+
+# === Read data and VIF results ===
+df <- read_csv("file/opa_sales_step2_clean.csv", show_col_types = FALSE)
+vif_path <- "file/vif_values.csv"
+if (!file.exists(vif_path)) stop("  file/vif_values.csv not found. Please run step2.R first.")
+vif_table <- read_csv(vif_path, show_col_types = FALSE)
+
+# === Determine target variable ===
+y_var <- case_when(
+  "sale_price_log" %in% names(df) ~ "sale_price_log",
+  "log_sale_price" %in% names(df) ~ "log_sale_price",
+  "sale_price" %in% names(df) ~ "sale_price",
+  TRUE ~ NA_character_
+)
+if (is.na(y_var)) stop("  Target variable sale_price_log or sale_price not found")
+
+# === Variable filtering (VIF) ===
+vif_threshold <- 5
+vars_keep <- vif_table %>%
+  filter(VIF <= vif_threshold) %>%
+  pull(variable)
+vars_keep <- intersect(vars_keep, names(df))
+
+cat("  Number of variables passing VIF ≤", vif_threshold, ":", length(vars_keep), "\n")
+```
+
+```{r}
+
+# === Prepare data matrix ===
+df_lasso <- df %>%
+  dplyr::select(all_of(c(y_var, vars_keep))) %>%
+  na.omit()
+
+x <- as.matrix(df_lasso %>% dplyr::select(-all_of(y_var)))
+y <- df_lasso[[y_var]]
+
+# === Run LASSO regression ===
+cvfit <- cv.glmnet(
+  x, y,
+  alpha = 1,            # LASSO
+  nfolds = 10,
+  standardize = TRUE
+)
+
+lambda_min <- cvfit$lambda.min
+lambda_1se <- cvfit$lambda.1se
+cat("λ_min =", signif(lambda_min, 5), "\n")
+cat("λ_1se =", signif(lambda_1se, 5), "\n")
+
+# === Extract non-zero coefficients ===
+coef_min <- coef(cvfit, s = "lambda.min")
+selected <- rownames(coef_min)[coef_min[, 1] != 0]
+selected <- selected[selected != "(Intercept)"]
+
+selected_tbl <- data.frame(
+  variable = selected,
+  coefficient = as.numeric(coef_min[selected, 1])
+)
+
+# === Remove variables with near-zero coefficients ===
+selected_tbl <- selected_tbl %>%
+  filter(abs(coefficient) >= 1e-5) %>%
+  arrange(desc(abs(coefficient)))
+
+cat("  Number of variables retained after LASSO:", nrow(selected_tbl), "\n")
+
+```
+
+```{r}
+
+# === Output files ===
+if (!dir.exists("file")) dir.create("file", recursive = TRUE)
+if (!dir.exists("plot")) dir.create("plot", recursive = TRUE)
+
+write_csv(selected_tbl, "file/lasso_selected_variables.csv")
+```
+
+```{r}
+# === Visualization 1: LASSO Coefficient Importance (Top 20) ===
+top_n_vars <- min(20, nrow(selected_tbl))
+selected_top <- selected_tbl %>% 
+  top_n(top_n_vars, abs(coefficient)) %>%
+  arrange(coefficient)
+
+p_coef <- ggplot(selected_top, aes(x = reorder(variable, coefficient), y = coefficient, fill = coefficient)) +
+  geom_col(alpha = 0.9) +
+  scale_fill_gradient2(
+    low = "#053061",      
+    mid = "#F7F7F7",      
+    high = "#67001F",     
+    midpoint = 0,
+    name = "Coefficient"
+  ) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "gray50", linewidth = 0.5) +
+  coord_flip() +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.major.x = element_line(color = "#E5E5E5", linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    legend.position = "right",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "LASSO Selected Variables - Coefficient Importance",
+    subtitle = paste0("Top ", top_n_vars, " variables by absolute coefficient value"),
+    x = "Variable",
+    y = "Coefficient",
+    caption = paste0("λ_min = ", signif(lambda_min, 4), " | Total selected: ", nrow(selected_tbl), " variables")
+  )
+
+ggsave("plot/lasso_coefficients.png", p_coef, width = 10, height = 8, dpi = 300, bg = "white")
+
+```
+
+```{r}
+# === Visualization 2: Cross-Validation Curve (λ Selection) ===
+cv_df <- data.frame(
+  lambda = cvfit$lambda,
+  cvm = cvfit$cvm,
+  cvsd = cvfit$cvsd,
+  cvlo = cvfit$cvm - cvfit$cvsd,
+  cvup = cvfit$cvm + cvfit$cvsd
+)
+
+p_cv <- ggplot(cv_df, aes(x = log(lambda), y = cvm)) +
+  geom_ribbon(aes(ymin = cvlo, ymax = cvup), fill = "#4393C3", alpha = 0.3) +
+  geom_line(color = "#053061", linewidth = 1) +
+  geom_point(color = "#053061", size = 2, alpha = 0.6) +
+  geom_vline(xintercept = log(lambda_min), linetype = "dashed", color = "#67001F", linewidth = 1) +
+  geom_vline(xintercept = log(lambda_1se), linetype = "dashed", color = "#D73027", linewidth = 0.7) +
+  annotate("text", x = log(lambda_min), y = max(cv_df$cvm) * 0.95, 
+           label = paste0("λ_min = ", signif(lambda_min, 3)), 
+           hjust = -0.1, size = 3.5, color = "#67001F") +
+  annotate("text", x = log(lambda_1se), y = max(cv_df$cvm) * 0.90, 
+           label = paste0("λ_1se = ", signif(lambda_1se, 3)), 
+           hjust = -0.1, size = 3.5, color = "#D73027") +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "#E5E5E5", linewidth = 0.5),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11, color = "gray40"),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "LASSO Cross-Validation Curve",
+    subtitle = "Mean Squared Error vs. log(λ)",
+    x = "log(λ)",
+    y = "Mean Squared Error",
+    caption = "Shaded area represents ±1 standard error"
+  )
+
+ggsave("plot/lasso_cv_curve.png", p_cv, width = 10, height = 7, dpi = 300, bg = "white")
+```
+
+```{r}
+# === Selection Summary ===
+cat("\n", rep("=", 60), "\n", sep = "")
+cat(" Summary of Feature Selection Results\n")
+cat(rep("=", 60), "\n")
+cat("Initial number of predictors:", ncol(x), "\n")
+cat("After VIF ≤", vif_threshold, ":", length(vars_keep), "\n")
+cat("Retained after LASSO:", nrow(selected_tbl), "\n")
+cat("Selection rate:", round((1 - nrow(selected_tbl) / ncol(x)) * 100, 1), "%\n")
+cat(rep("=", 60), "\n\n")
+
+cat(" Step 3 Completed\n")
+cat(" LASSO results: file/lasso_selected_variables.csv\n")
+cat(" Coefficient importance: plot/lasso_coeff_importance_top20.png\n")
+cat(" CV curve: plot/lasso_cv_curve.png\n")
+
+```
+
+
+
+Step4
+
+
+
+```{r}
+# =========================================================
+# Step 4 Enhanced: Four Progressive Models + Coefficient Tables + Feature Importance
+# =========================================================
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(broom)
+library(patchwork)
+library(sandwich)
+library(lmtest)
+library(car)
+
+set.seed(2025)
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("  Step 4: OLS Progressive Modeling and Full Analysis\n")
+cat(rep("=", 80), "\n\n")
+```
+
+```{r}
+# === Read Data ===
+df <- read_csv("file/opa_sales_step2_clean.csv", show_col_types = FALSE)
+
+y_var <- case_when(
+  "sale_price_log" %in% names(df) ~ "sale_price_log",
+  "log_sale_price" %in% names(df) ~ "log_sale_price",
+  "sale_price" %in% names(df) ~ "sale_price",
+  TRUE ~ NA_character_
+)
+if (is.na(y_var)) stop(" Target variable not found")
+
+cat(sprintf("Target variable: %s\n", y_var))
+cat(sprintf("Sample size: %d\n\n", nrow(df)))
+
+```
+
+```{r}
+# === Data preprocessing ===
+cat("=== Data preprocessing ===\n")
+
+cat_vars <- c("interior_condition", "exterior_condition", "zip_code", "census_tract")
+cat_vars <- intersect(cat_vars, names(df))
+
+for (cat_var in cat_vars) {
+  if (cat_var %in% c("zip_code", "census_tract")) {
+    freq_table <- table(df[[cat_var]])
+    sparse_levels <- names(freq_table[freq_table < 100])
+    df[[cat_var]] <- as.character(df[[cat_var]])
+    df[[cat_var]][df[[cat_var]] %in% sparse_levels] <- "Other"
+    df[[cat_var]] <- factor(df[[cat_var]])
+    cat(sprintf("  %s: %d → %d categories\n", cat_var, length(freq_table), length(levels(df[[cat_var]]))))
+  } else {
+    df[[cat_var]] <- factor(df[[cat_var]])
+  }
+}
+
+coord_vars <- c("x_coord", "y_coord")
+if (all(coord_vars %in% names(df))) {
+  center_x <- median(df$x_coord, na.rm = TRUE)
+  center_y <- median(df$y_coord, na.rm = TRUE)
+  df$dist_to_center <- sqrt((df$x_coord - center_x)^2 + (df$y_coord - center_y)^2)
+  cat("  Added: dist_to_center\n")
+} else {
+  coord_vars <- c()
+}
+
+# Identify variable groups
+structural_vars <- c()
+for (pattern in c("livable_area", "bedroom", "bathroom", "stories", "garage", "age")) {
+  matched <- grep(pattern, names(df), value = TRUE, ignore.case = TRUE)
+  structural_vars <- c(structural_vars, matched)
+}
+structural_vars <- unique(structural_vars)
+structural_vars <- structural_vars[sapply(df[structural_vars], is.numeric)]
+
+census_vars <- c()
+for (pattern in c("income", "poverty", "education", "bachelor", "population", "household")) {
+  matched <- grep(pattern, names(df), value = TRUE, ignore.case = TRUE)
+  census_vars <- c(census_vars, matched)
+}
+census_vars <- unique(census_vars)
+census_vars <- census_vars[sapply(df[census_vars], is.numeric)]
+
+spatial_vars <- c(coord_vars, "dist_to_center")
+spatial_vars <- intersect(spatial_vars, names(df))
+
+fixed_effects <- c("zip_code", "census_tract")
+fixed_effects <- intersect(fixed_effects, names(df))
+
+cat(sprintf("\n  Structural features: %d\n", length(structural_vars)))
+cat(sprintf("  Census features: %d\n", length(census_vars)))
+cat(sprintf("  Spatial features: %d\n", length(spatial_vars)))
+cat(sprintf("  Fixed effects: %d\n", length(fixed_effects)))
+
+```
+
+```{r}
+# =========================================================
+# Build 4 Progressive Models
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Building 4 Progressive Models ===\n\n")
+
+make_formula <- function(y, main_vars, interact_vars = NULL, fe_vars = NULL) {
+  rhs <- main_vars
+  if (!is.null(interact_vars) && length(interact_vars) == 2) {
+    rhs <- c(rhs, paste(interact_vars, collapse = ":"))
+  }
+  if (!is.null(fe_vars)) {
+    rhs <- c(rhs, fe_vars)
+  }
+  as.formula(paste(y, "~", paste(rhs, collapse = " + ")))
+}
+
+f1 <- make_formula(y_var, structural_vars)
+f2 <- make_formula(y_var, c(structural_vars, census_vars))
+f3 <- make_formula(y_var, c(structural_vars, census_vars, spatial_vars))
+
+interact_pairs <- NULL
+if ("total_livable_area" %in% structural_vars && "median_incomeE" %in% census_vars) {
+  interact_pairs <- c("total_livable_area", "median_incomeE")
+}
+
+f4 <- make_formula(y_var, c(structural_vars, census_vars, spatial_vars),
+                   interact_vars = interact_pairs, fe_vars = fixed_effects)
+
+models <- list()
+cat("  Fitting Model 1..."); models[["M1: Structural"]] <- lm(f1, data = df, na.action = na.exclude); cat(" ✓\n")
+cat("  Fitting Model 2..."); models[["M2: +Census"]] <- lm(f2, data = df, na.action = na.exclude); cat(" ✓\n")
+cat("  Fitting Model 3..."); models[["M3: +Spatial"]] <- lm(f3, data = df, na.action = na.exclude); cat(" ✓\n")
+cat("  Fitting Model 4..."); models[["M4: +Interact+FE"]] <- lm(f4, data = df, na.action = na.exclude); cat(" ✓\n")
+
+
+```
+
+```{r}
+# =========================================================
+# Model Performance Evaluation
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Model Performance Evaluation ===\n\n")
+
+train_perf <- lapply(models, function(m) {
+  pred <- fitted(m)
+  actual <- df[[y_var]][!is.na(fitted(m))]
+  
+  # Log-scale metrics
+  rmse_log <- sqrt(mean((pred - actual)^2, na.rm = TRUE))
+  mae_log <- mean(abs(pred - actual), na.rm = TRUE)
+  
+  # Original-scale metrics — use expm1 to invert log1p
+  pred_original <- expm1(pred)
+  actual_original <- expm1(actual)
+  
+  # Method 3: remove outliers based on residuals (|residual| > 3 standard deviations)
+  residuals_original <- pred_original - actual_original
+  res_sd <- sd(residuals_original, na.rm = TRUE)
+  valid_idx <- abs(residuals_original) <= 3 * res_sd
+  
+  # Compute RMSE and MAE after removing outliers
+  rmse_original <- sqrt(mean((pred_original[valid_idx] - actual_original[valid_idx])^2, na.rm = TRUE))
+  mae_original <- mean(abs(pred_original[valid_idx] - actual_original[valid_idx]), na.rm = TRUE)
+  
+  data.frame(
+    RMSE_log = rmse_log,
+    RMSE_original = rmse_original,
+    MAE_log = mae_log,
+    MAE_original = mae_original,
+    R2 = summary(m)$r.squared,
+    Adj_R2 = summary(m)$adj.r.squared,
+    N_vars = length(coef(m)) - 1,
+    N = length(pred),
+    N_valid = sum(valid_idx, na.rm = TRUE),      # retained sample count
+    Pct_valid = mean(valid_idx, na.rm = TRUE) * 100  # percentage of retained samples
+  )
+}) %>% bind_rows(.id = "Model")
+
+# Print removal stats
+cat("\nOutlier removal statistics (|residual| > 3σ):\n")
+print(train_perf %>% select(Model, N, N_valid, Pct_valid, RMSE_original, MAE_original))
+
+cat("Performing 10-fold cross-validation...\n")
+cv_ctrl <- trainControl(method = "cv", number = 10, verboseIter = FALSE)
+formulas <- list(f1, f2, f3, f4)
+names(formulas) <- names(models)
+
+cv_results <- lapply(formulas, function(fm) {
+  tryCatch(train(fm, data = df, method = "lm", trControl = cv_ctrl, na.action = na.omit),
+           error = function(e) NULL)
+})
+cv_results <- Filter(Negate(is.null), cv_results)
+
+cv_perf <- lapply(cv_results, function(m) {
+  data.frame(CV_RMSE_log = m$results$RMSE[1], CV_R2 = m$results$Rsquared[1])
+}) %>% bind_rows(.id = "Model")
+
+perf_table <- train_perf %>%
+  left_join(cv_perf, by = "Model") %>%
+  mutate(Overfit_RMSE_log = CV_RMSE_log - RMSE_log, Overfit_R2 = R2 - CV_R2)
+
+cat("\n")
+print(perf_table, digits = 4, row.names = FALSE)
+
+```
+
+```{r}
+# =========================================================
+# Heteroskedasticity Test
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Heteroskedasticity Test (Model 4) ===\n\n")
+
+bp_test <- bptest(models[["M4: +Interact+FE"]])
+cat(sprintf("Breusch–Pagan Test:\n  Statistic = %.2f\n  p-value = %.4f\n", 
+            bp_test$statistic, bp_test$p.value))
+
+if (bp_test$p.value < 0.05) {
+  cat("\n️ Significant heteroskedasticity detected (p < 0.05)\n   Recommendation: use robust standard errors\n")
+} else {
+  cat("\n No significant heteroskedasticity detected\n")
+}
+
+```
+
+```{r}
+# =========================================================
+# Model 4 Full Coefficient Table (Robust Standard Errors)
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Model 4: Full Coefficient Table (Robust SE) ===\n\n")
+
+model4 <- models[["M4: +Interact+FE"]]
+robust_coef <- coeftest(model4, vcov = vcovHC(model4, type = "HC1"))
+
+coef_table <- tidy(robust_coef) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    sig = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01 ~ "**",
+      p.value < 0.05 ~ "*",
+      p.value < 0.10 ~ ".",
+      TRUE ~ ""
+    )
+  ) %>%
+  arrange(p.value) %>%
+  dplyr::select(term, estimate, std.error, statistic, p.value, sig)
+
+if (!dir.exists("file")) dir.create("file")
+if (!dir.exists("table")) dir.create("table")
+
+write_csv(coef_table, "table/model4_full_coefficients.csv")
+cat("  ✓ table/model4_full_coefficients.csv (All coefficients)\n")
+
+coef_sig <- coef_table %>% filter(p.value < 0.05)
+write_csv(coef_sig, "table/model4_significant_coefficients.csv")
+cat("  ✓ table/model4_significant_coefficients.csv (Significant coefficients)\n")
+
+cat(sprintf("\nNumber of significant variables (p < 0.05): %d\n", nrow(coef_sig)))
+cat("\nTop 20 significant variables:\n")
+print(as.data.frame(head(coef_sig, 20)), row.names = FALSE)
+
+
+```
+
+```{r}
+# =========================================================
+# Stargazer Regression Table
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Generating Stargazer Regression Table ===\n\n")
+
+if (requireNamespace("stargazer", quietly = TRUE)) {
+  sink("table/regression_table.txt")
+  stargazer::stargazer(
+    models[[1]], models[[2]], models[[3]], models[[4]],
+    type = "text",
+    title = "Progressive OLS Regression Results",
+    dep.var.labels = "Log Sale Price",
+    column.labels = c("Model 1", "Model 2", "Model 3", "Model 4"),
+    omit.stat = c("ser", "f"),
+    digits = 3,
+    star.cutoffs = c(0.05, 0.01, 0.001),
+    notes = "Robust standard errors in parentheses"
+  )
+  sink()
+  cat("   table/regression_table.txt\n")
+}
+
+```
+
+```{r}
+# =========================================================
+# Cross-Model Feature Importance
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Cross-Model Feature Importance Comparison ===\n\n")
+
+importance_list <- list()
+for (i in 1:4) {
+  model_name <- names(models)[i]
+  model <- models[[i]]
+  
+  coefs <- tidy(model) %>%
+    filter(term != "(Intercept)") %>%
+    mutate(abs_estimate = abs(estimate)) %>%
+    arrange(desc(abs_estimate)) %>%
+    head(10) %>%
+    mutate(Model = model_name) %>%
+    dplyr::select(Model, term, estimate, abs_estimate)
+  
+  importance_list[[i]] <- coefs
+}
+
+importance_all <- bind_rows(importance_list)
+write_csv(importance_all, "table/feature_importance_all_models.csv")
+cat("  ✓ table/feature_importance_all_models.csv\n")
+
+# Identify variables that are important across multiple models
+top_vars <- importance_all %>%
+  group_by(term) %>%
+  summarise(appearances = n(), .groups = "drop") %>%
+  filter(appearances >= 3) %>%
+  pull(term)
+
+if (length(top_vars) > 0) {
+  importance_key <- importance_all %>% filter(term %in% top_vars)
+  
+  if (!dir.exists("plot")) dir.create("plot")
+  
+  p_importance <- ggplot(importance_key, aes(Model, abs_estimate, fill = Model)) +
+    geom_col(alpha = 0.8) +
+    facet_wrap(~term, scales = "free_y", ncol = 4) +
+    scale_fill_manual(
+      values = c("#053061", "#2166AC", "#4393C3", "#D6604D"),
+      guide = "none"
+    ) +
+    theme_minimal(base_size = 9) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 7),
+      strip.text = element_text(face = "bold", size = 9),
+      panel.grid.major.x = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+      plot.subtitle = element_text(hjust = 0.5, size = 10),
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(
+      title = "Feature Importance Across Models",
+      subtitle = "Variables appearing in top 10 of at least 3 models",
+      x = NULL, y = "Absolute Coefficient"
+    )
+  
+  ggsave("plot/feature_importance_across_models.png", p_importance,
+         width = 14, height = 10, dpi = 300, bg = "white")
+  cat("   plot/feature_importance_across_models.png\n")
+}
+```
+
+```{r}
+# =========================================================
+# Visualization (Original 3 Figures)
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Generate Performance Visualizations ===\n\n")
+
+perf_plot_data <- perf_table %>% mutate(Model_Num = 1:n())
+
+p_r2 <- ggplot(perf_plot_data, aes(Model_Num)) +
+  geom_line(aes(y = R2, color = "Training R²"), linewidth = 1.2) +
+  geom_line(aes(y = CV_R2, color = "CV R²"), linewidth = 1.2) +
+  geom_point(aes(y = R2, color = "Training R²"), size = 3) +
+  geom_point(aes(y = CV_R2, color = "CV R²"), size = 3) +
+  scale_color_manual(values = c("Training R²" = "#67001F", "CV R²" = "#053061"), name = NULL) +
+  scale_x_continuous(breaks = 1:4, labels = perf_table$Model) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, size = 9),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    legend.position = "bottom",
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "R² Improvement: Progressive Model Building", x = NULL, y = "R² Value")
+
+p_rmse <- ggplot(perf_plot_data, aes(Model_Num)) +
+  geom_line(aes(y = RMSE_original/1000, color = "RMSE ($1000s)"), linewidth = 1.2) +
+  geom_point(aes(y = RMSE_original/1000, color = "RMSE ($1000s)"), size = 3) +
+  scale_color_manual(values = c("RMSE ($1000s)" = "#67001F"), name = NULL) +
+  scale_x_continuous(breaks = 1:4, labels = perf_table$Model) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1, size = 9),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    legend.position = "bottom",
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "RMSE Reduction (Original Scale)", x = NULL, y = "RMSE ($1000s)")
+
+p_combined <- (p_r2 | p_rmse) +
+  plot_annotation(
+    title = "4-Model Progressive OLS: Performance Evolution",
+    subtitle = "From structural features to full specification with interactions and fixed effects",
+    theme = theme(
+      plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 11, hjust = 0.5),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+  )
+
+ggsave("plot/ols_4model_performance.png", p_combined, width = 14, height = 6, dpi = 300, bg = "white")
+cat("  ✓ plot/ols_4model_performance.png\n")
+```
+
+```{r}
+# Prediction Scatter Plot
+pred_m4 <- fitted(models[["M4: +Interact+FE"]])
+actual_m4 <- df[[y_var]][!is.na(pred_m4)]
+pred_data <- data.frame(
+  actual = actual_m4,
+  predicted = pred_m4[!is.na(pred_m4)],
+  residual = pred_m4[!is.na(pred_m4)] - actual_m4
+)
+
+p_pred <- ggplot(pred_data, aes(actual, predicted)) +
+  geom_point(aes(color = residual), alpha = 0.4, size = 0.8) +
+  scale_color_gradient2(low = "#053061", mid = "#F7F7F7", high = "#67001F", midpoint = 0, name = "Residual") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", linewidth = 1) +
+  annotate("text", x = min(pred_data$actual) + 0.5, y = max(pred_data$predicted) - 0.5,
+           label = sprintf("R² = %.4f\nRMSE = %.4f", perf_table$R2[4], perf_table$RMSE[4]),
+           hjust = 0, size = 4.5, fontface = "bold") +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11),
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(title = "Model 4: Prediction vs. Actual",
+       subtitle = "Full specification with interactions and fixed effects",
+       x = "Actual Sale Price (log)", y = "Predicted Sale Price (log)")
+
+ggsave("plot/ols_4model_prediction.png", p_pred, width = 10, height = 8, dpi = 300, bg = "white")
+cat("   plot/ols_4model_prediction.png\n")
+```
+
+```{r}
+# Residual Diagnostics
+resid_data <- data.frame(
+  fitted = pred_m4[!is.na(pred_m4)],
+  residual = pred_data$residual,
+  std_resid = rstandard(models[["M4: +Interact+FE"]])[!is.na(pred_m4)]
+)
+
+p_r1 <- ggplot(resid_data, aes(fitted, residual)) +
+  geom_point(alpha = 0.3, size = 0.6, color = "#053061") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_smooth(method = "loess", se = TRUE, color = "#67001F", linewidth = 1) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.background = element_rect(fill = "white", color = NA)) +
+  labs(title = "Residuals vs. Fitted", x = "Fitted", y = "Residuals")
+
+p_r2 <- ggplot(resid_data, aes(sample = std_resid)) +
+  stat_qq(alpha = 0.4, size = 0.6, color = "#053061") +
+  stat_qq_line(color = "#67001F", linewidth = 1) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.background = element_rect(fill = "white", color = NA)) +
+  labs(title = "Normal Q-Q", x = "Theoretical", y = "Std. Residuals")
+
+p_r3 <- ggplot(resid_data, aes(std_resid)) +
+  geom_histogram(bins = 50, fill = "#053061", color = "white", alpha = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#67001F", linewidth = 1) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.background = element_rect(fill = "white", color = NA)) +
+  labs(title = "Residual Distribution", x = "Std. Residuals", y = "Count")
+
+p_r4 <- ggplot(resid_data, aes(fitted, sqrt(abs(std_resid)))) +
+  geom_point(alpha = 0.3, size = 0.6, color = "#053061") +
+  geom_smooth(method = "loess", se = TRUE, color = "#67001F", linewidth = 1) +
+  theme_minimal(base_size = 10) +
+  theme(panel.grid.minor = element_blank(), plot.background = element_rect(fill = "white", color = NA)) +
+  labs(title = "Scale-Location", x = "Fitted", y = "√|Std. Residuals|")
+
+p_diag <- (p_r1 | p_r2) / (p_r3 | p_r4) +
+  plot_annotation(
+    title = sprintf("Model 4 Diagnostics (BP test p = %.4f)", bp_test$p.value),
+    theme = theme(plot.title = element_text(size = 13, face = "bold", hjust = 0.5),
+                  plot.background = element_rect(fill = "white", color = NA))
+  )
+
+ggsave("plot/ols_4model_diagnostics.png", p_diag, width = 12, height = 10, dpi = 300, bg = "white")
+cat("  ✓ plot/ols_4model_diagnostics.png\n")
+```
+
+```{r}
+# =========================================================
+# Spatial Prediction Comparison Plot
+# =========================================================
+
+if (all(c("x_coord", "y_coord") %in% names(df))) {
+  cat("\n", rep("=", 80), "\n", sep = "")
+  cat("=== Generating Spatial Prediction Comparison Plot ===\n\n")
+  
+  # Prepare data
+  spatial_pred_data <- df %>%
+    filter(!is.na(x_coord) & !is.na(y_coord)) %>%
+    mutate(
+      predicted = fitted(models[["M4: +Interact+FE"]]),
+      residual = predicted - .data[[y_var]]
+    ) %>%
+    filter(!is.na(predicted))
+  
+  # If the dataset is too large, randomly sample to speed up plotting
+  if (nrow(spatial_pred_data) > 10000) {
+    set.seed(2025)
+    spatial_pred_data <- spatial_pred_data %>% 
+      slice_sample(n = 10000)
+    cat("  Large dataset detected; randomly sampled 10,000 points for plotting\n")
+  }
+
+# 1. Spatial Distribution of Actual Sale Prices
+p_actual <- ggplot(spatial_pred_data, aes(x_coord, y_coord, color = .data[[y_var]])) +
+  geom_point(alpha = 0.6, size = 1) +
+  scale_color_gradient2(
+    low = "#053061", mid = "#F7F7F7", high = "#67001F",
+    midpoint = median(spatial_pred_data[[y_var]], na.rm = TRUE),
+    name = "Log Price"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    legend.position = "right",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "Actual Sale Price",
+    x = "X Coordinate",
+    y = "Y Coordinate"
+  )
+
+# 2. Spatial Distribution of Predicted Sale Prices
+p_predicted <- ggplot(spatial_pred_data, aes(x_coord, y_coord, color = predicted)) +
+  geom_point(alpha = 0.6, size = 1) +
+  scale_color_gradient2(
+    low = "#053061", mid = "#F7F7F7", high = "#67001F",
+    midpoint = median(spatial_pred_data$predicted, na.rm = TRUE),
+    name = "Log Price"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    legend.position = "right",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "Predicted Sale Price (Model 4)",
+    x = "X Coordinate",
+    y = "Y Coordinate"
+  )
+
+# 3. Spatial Distribution of Residuals
+p_residual_spatial <- ggplot(spatial_pred_data, aes(x_coord, y_coord, color = residual)) +
+  geom_point(alpha = 0.6, size = 1) +
+  scale_color_gradient2(
+    low = "#053061", mid = "#F7F7F7", high = "#67001F",
+    midpoint = 0,
+    name = "Residual"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+    legend.position = "right",
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "Prediction Residuals",
+    subtitle = "Blue = Underpredicted | Red = Overpredicted",
+    x = "X Coordinate",
+    y = "Y Coordinate"
+  )
+
+# Combine the 3 plots
+p_spatial_comparison <- (p_actual | p_predicted | p_residual_spatial) +
+  plot_annotation(
+    title = "Spatial Distribution: Actual vs. Predicted Sale Prices",
+    subtitle = sprintf("Model 4 predictions (R² = %.4f, RMSE = %.4f)", 
+                      perf_table$R2[4], perf_table$RMSE[4]),
+    theme = theme(
+      plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(size = 12, hjust = 0.5),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+  )
+
+ggsave("plot/spatial_prediction_comparison.png", p_spatial_comparison,
+       width = 18, height = 6, dpi = 300, bg = "white")
+cat("   plot/spatial_prediction_comparison.png\n")
+
+  # 4. High-Resolution Hexbin Heatmap Version
+  p_actual_hex <- ggplot(spatial_pred_data, aes(x_coord, y_coord, z = .data[[y_var]])) +
+    stat_summary_hex(bins = 40, fun = mean) +
+    scale_fill_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = median(spatial_pred_data[[y_var]], na.rm = TRUE),
+      name = "Avg Log Price"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(title = "Actual (Hexbin Average)", x = "X Coordinate", y = "Y Coordinate")
+  
+  p_predicted_hex <- ggplot(spatial_pred_data, aes(x_coord, y_coord, z = predicted)) +
+    stat_summary_hex(bins = 40, fun = mean) +
+    scale_fill_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = median(spatial_pred_data$predicted, na.rm = TRUE),
+      name = "Avg Log Price"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(title = "Predicted (Hexbin Average)", x = "X Coordinate", y = "Y Coordinate")
+  
+  p_residual_hex <- ggplot(spatial_pred_data, aes(x_coord, y_coord, z = residual)) +
+    stat_summary_hex(bins = 40, fun = mean) +
+    scale_fill_gradient2(
+      low = "#053061", mid = "#F7F7F7", high = "#67001F",
+      midpoint = 0,
+      name = "Avg Residual"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 13),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(title = "Residuals (Hexbin Average)", x = "X Coordinate", y = "Y Coordinate")
+  
+  p_spatial_hexbin <- (p_actual_hex | p_predicted_hex | p_residual_hex) +
+    plot_annotation(
+      title = "Spatial Distribution (Hexbin Aggregation): Actual vs. Predicted",
+      subtitle = "Hexagonal bins show average values in each area",
+      theme = theme(
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 12, hjust = 0.5),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
+    )
+  
+  ggsave("plot/spatial_prediction_hexbin.png", p_spatial_hexbin,
+         width = 18, height = 6, dpi = 300, bg = "white")
+  cat("  ✓ plot/spatial_prediction_hexbin.png\n")
+  
+  # 5. Spatial Clustering of Residuals
+  # Calculate spatial statistics of residuals
+  residual_stats <- spatial_pred_data %>%
+    summarise(
+      mean_residual = mean(residual, na.rm = TRUE),
+      sd_residual = sd(residual, na.rm = TRUE),
+      min_residual = min(residual, na.rm = TRUE),
+      max_residual = max(residual, na.rm = TRUE)
+    )
+  
+  cat("\n  Spatial Residual Statistics:\n")
+  cat(sprintf("    Mean: %.4f\n", residual_stats$mean_residual))
+  cat(sprintf("    Standard Deviation: %.4f\n", residual_stats$sd_residual))
+  cat(sprintf("    Range: [%.4f, %.4f]\n", 
+              residual_stats$min_residual, residual_stats$max_residual))
+  
+  # Identify high-residual areas
+  high_residual_areas <- spatial_pred_data %>%
+    filter(abs(residual) > 2 * residual_stats$sd_residual) %>%
+    mutate(residual_type = ifelse(residual > 0, "Overpredicted", "Underpredicted"))
+  
+  if (nrow(high_residual_areas) > 0) {
+    cat(sprintf("\n  ️ Detected %d high-residual points (|residual| > 2σ):\n", 
+                nrow(high_residual_areas)))
+    cat(sprintf("    Overpredicted: %d\n", sum(high_residual_areas$residual_type == "Overpredicted")))
+    cat(sprintf("    Underpredicted: %d\n", sum(high_residual_areas$residual_type == "Underpredicted")))
+    
+    # Save high-residual point data
+    write_csv(high_residual_areas %>% 
+                dplyr::select(x_coord, y_coord, !!sym(y_var), predicted, residual, residual_type),
+              "file/high_residual_locations.csv")
+    cat("     file/high_residual_locations.csv\n")
+  }
+}
+```
+
+```{r}
+# =========================================================
+# Save Results
+# =========================================================
+
+write_csv(perf_table, "file/ols_4model_performance.csv")
+saveRDS(models, "file/ols_4models.rds")
+
+# =========================================================
+# Summary
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat(" Step 4 Completed\n")
+cat(rep("=", 80), "\n\n")
+
+cat(" Output Files:\n\n")
+cat("Tables:\n")
+cat("  • table/model4_full_coefficients.csv - Full coefficient table (Model 4)\n")
+cat("  • table/model4_significant_coefficients.csv - Significant coefficients (Model 4)\n")
+cat("  • table/regression_table.txt - Stargazer regression summary\n")
+cat("  • table/feature_importance_all_models.csv - Cross-model feature importance\n")
+cat("  • file/ols_4model_performance.csv - Model performance comparison\n")
+cat("  • file/ols_4models.rds - RDS objects of all 4 models\n\n")
+
+cat("Figures:\n")
+cat("  • plot/ols_4model_performance.png - Performance evolution\n")
+cat("  • plot/ols_4model_prediction.png - Model 4 prediction vs. actual\n")
+cat("  • plot/ols_4model_diagnostics.png - Model 4 diagnostic plots\n")
+cat("  • plot/feature_importance_across_models.png - Cross-model feature importance\n")
+if (all(c("x_coord", "y_coord") %in% names(df))) {
+  cat("  • plot/spatial_prediction_comparison.png - Spatial prediction comparison\n")
+  cat("  • plot/spatial_prediction_hexbin.png - Spatial prediction heatmap\n")
+}
+cat("\n")
+
+cat(" Model Summary:\n")
+
+for (i in 1:4) {
+  rmse_fmt <- formatC(perf_table$RMSE_original[i], format = "f", digits = 0, big.mark = ",")
+  cat(sprintf("  Model %d: R² = %.4f, RMSE = $%s [%d variables]\n",
+              i, perf_table$R2[i], rmse_fmt, perf_table$N_vars[i]))
+}
+
+cat("\n Paper Writing Suggestions:\n")
+cat("  1. Results (Opening): Descriptive statistics table\n")
+cat("  2. Results (Core): Stargazer regression summary (comparison of 4 models)\n")
+cat("  3. Results (Details): Significant coefficients of Model 4\n")
+cat("  4. Discussion: Cross-model feature importance comparison\n")
+cat("  5. Mention the use of robust standard errors to address heteroskedasticity\n\n")
+
+```
+
+
+
+
+Step4 plus
+
+
+
+```{r}
+# =========================================================
+# Step 4 Supplement: Cook’s Distance + Moran’s I Spatial Autocorrelation
+# =========================================================
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(patchwork)
+library(spdep)  # Moran’s I
+library(sf)     # Spatial data
+
+set.seed(2025)
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat(" Step 4 Supplement: Influential Point Diagnostics and Spatial Autocorrelation Test\n")
+cat(rep("=", 80), "\n\n")
+
+# === Load Data and Models ===
+df <- read_csv("file/opa_sales_step2_clean.csv", show_col_types = FALSE)
+models <- readRDS("file/ols_4models.rds")
+model4 <- models[["M4: +Interact+FE"]]
+
+y_var <- case_when(
+  "sale_price_log" %in% names(df) ~ "sale_price_log",
+  "log_sale_price" %in% names(df) ~ "log_sale_price",
+  "sale_price" %in% names(df) ~ "sale_price",
+  TRUE ~ NA_character_
+)
+
+```
+
+```{r}
+# =========================================================
+# 1. Cook’s Distance – Influential Observation Detection
+# =========================================================
+
+cat("=== Cook’s Distance Analysis ===\n\n")
+
+# Calculate Cook’s distance
+cooks_d <- cooks.distance(model4)
+n <- length(cooks_d)
+threshold <- 4/n  # Classic threshold
+
+# Identify influential points
+influential <- which(cooks_d > threshold)
+cat(sprintf("Sample size: %d\n", n))
+cat(sprintf("Cook’s D threshold: %.6f (4/n)\n", threshold))
+cat(sprintf("Number of influential points: %d (%.2f%%)\n", length(influential), 100*length(influential)/n))
+
+# Save influential observations
+if (length(influential) > 0) {
+  influential_data <- df[influential, ] %>%
+    mutate(
+      cooks_d = cooks_d[influential],
+      fitted = fitted(model4)[influential],
+      residual = residuals(model4)[influential]
+    ) %>%
+    arrange(desc(cooks_d)) %>%
+    head(100)  # Save Top 100
+  
+  write_csv(influential_data, "file/influential_observations.csv")
+  cat("  ✓ file/influential_observations.csv (Top 100 Influential Points)\n")
+  
+  # Display Top 10
+  cat("\nTop 10 Influential Points:\n")
+  print(influential_data %>% 
+          select(parcel_number, sale_price, cooks_d, fitted, residual) %>% 
+          head(10), 
+        n = 10)
+}
+
+# Visualize Cook’s Distance
+cooks_df <- data.frame(
+  index = 1:n,
+  cooks_d = cooks_d,
+  influential = cooks_d > threshold
+)
+
+p_cooks <- ggplot(cooks_df, aes(index, cooks_d, color = influential)) +
+  geom_point(alpha = 0.4, size = 0.8) +
+  geom_hline(yintercept = threshold, linetype = "dashed", color = "#67001F", linewidth = 1) +
+  scale_color_manual(
+    values = c("FALSE" = "#053061", "TRUE" = "#67001F"),
+    labels = c("FALSE" = "Normal", "TRUE" = "Influential"),
+    name = NULL
+  ) +
+  annotate("text", x = n*0.8, y = threshold*1.2,
+           label = sprintf("Threshold = %.6f", threshold),
+           color = "#67001F", size = 4) +
+  theme_minimal(base_size = 11) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    plot.subtitle = element_text(hjust = 0.5, size = 11),
+    legend.position = "bottom",
+    plot.background = element_rect(fill = "white", color = NA)
+  ) +
+  labs(
+    title = "Cook’s Distance – Detection of Influential Observations",
+    subtitle = sprintf("%d influential points (%.2f%% of data)", 
+                      length(influential), 100*length(influential)/n),
+    x = "Observation Index",
+    y = "Cook’s Distance",
+    caption = "Threshold = 4/n (classic rule)"
+  )
+
+if (!dir.exists("plot")) dir.create("plot")
+ggsave("plot/cooks_distance.png", p_cooks, width = 12, height = 6, dpi = 300, bg = "white")
+cat("\n   plot/cooks_distance.png\n")
+
+```
+
+```{r}
+# =========================================================
+# 2. Moran’s I – Spatial Autocorrelation Test
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat("=== Moran’s I Spatial Autocorrelation Test ===\n\n")
+
+# Check coordinates
+if (all(c("x_coord", "y_coord") %in% names(df))) {
+  
+  # Prepare spatial data
+  df_spatial <- df %>%
+    filter(!is.na(x_coord), !is.na(y_coord)) %>%
+    mutate(
+      residual = residuals(model4)[!is.na(x_coord) & !is.na(y_coord)],
+      sale_price_actual = .data[[y_var]]
+    ) %>%
+    filter(!is.na(residual))
+  
+  # Convert to sf object
+  coords <- df_spatial %>% select(x_coord, y_coord)
+  coords_sf <- st_as_sf(coords, coords = c("x_coord", "y_coord"), crs = 2272)
+  
+  cat(sprintf("Valid samples: %d\n\n", nrow(df_spatial)))
+  
+  # === 2.1 Moran’s I for Actual Sale Price ===
+  cat("--- Spatial Autocorrelation of Actual Sale Price ---\n")
+  
+  # Build spatial weight matrix (K-nearest neighbors, k=8)
+  nb_knn <- knn2nb(knearneigh(coords_sf, k = 8))
+  listw_knn <- nb2listw(nb_knn, style = "W")
+  
+  # Moran’s I test
+  moran_price <- moran.test(df_spatial$sale_price_actual, listw_knn)
+  
+  cat(sprintf("  Moran’s I = %.4f\n", moran_price$estimate[1]))
+  cat(sprintf("  Expected = %.4f\n", moran_price$estimate[2]))
+  cat(sprintf("  Variance = %.6f\n", moran_price$estimate[3]))
+  cat(sprintf("  Z-score = %.4f\n", moran_price$statistic))
+  cat(sprintf("  p-value = %.4e\n", moran_price$p.value))
+  
+  if (moran_price$p.value < 0.001) {
+    cat("  *** Highly significant positive spatial autocorrelation (p < 0.001)\n")
+  } else if (moran_price$p.value < 0.05) {
+    cat("  ** Significant positive spatial autocorrelation (p < 0.05)\n")
+  } else {
+    cat("  No significant spatial autocorrelation detected\n")
+  }
+  
+  # === 2.2 Moran’s I for Residuals ===
+  cat("\n--- Spatial Autocorrelation of Model 4 Residuals ---\n")
+  
+  moran_resid <- moran.test(df_spatial$residual, listw_knn)
+  
+  cat(sprintf("  Moran’s I = %.4f\n", moran_resid$estimate[1]))
+  cat(sprintf("  Expected = %.4f\n", moran_resid$estimate[2]))
+  cat(sprintf("  Variance = %.6f\n", moran_resid$estimate[3]))
+  cat(sprintf("  Z-score = %.4f\n", moran_resid$statistic))
+  cat(sprintf("  p-value = %.4e\n", moran_resid$p.value))
+  
+  if (moran_resid$p.value < 0.001) {
+    cat("  ️ Strong residual spatial autocorrelation detected (p < 0.001)\n")
+    cat("  Suggestion: Consider Spatial Lag Model (SAR) or Spatial Error Model (SEM)\n")
+  } else if (moran_resid$p.value < 0.05) {
+    cat("  ️ Residual spatial autocorrelation detected (p < 0.05)\n")
+    cat("  Suggestion: Add more spatial variables or use spatial regression models\n")
+  } else {
+    cat("  ✓ No significant residual spatial autocorrelation – spatial effects well captured\n")
+  }
+  
+  # === 2.3 Moran Scatterplots ===
+  
+  # Calculate spatial lags
+  lag_price <- lag.listw(listw_knn, df_spatial$sale_price_actual)
+  lag_resid <- lag.listw(listw_knn, df_spatial$residual)
+  
+  # Standardize
+  price_std <- scale(df_spatial$sale_price_actual)[,1]
+  lag_price_std <- scale(lag_price)[,1]
+  resid_std <- scale(df_spatial$residual)[,1]
+  lag_resid_std <- scale(lag_resid)[,1]
+  
+  # Define quadrants
+  quadrant_price <- case_when(
+    price_std > 0 & lag_price_std > 0 ~ "HH (High-High)",
+    price_std < 0 & lag_price_std < 0 ~ "LL (Low-Low)",
+    price_std > 0 & lag_price_std < 0 ~ "HL (High-Low)",
+    TRUE ~ "LH (Low-High)"
+  )
+  
+  quadrant_resid <- case_when(
+    resid_std > 0 & lag_resid_std > 0 ~ "HH",
+    resid_std < 0 & lag_resid_std < 0 ~ "LL",
+    resid_std > 0 & lag_resid_std < 0 ~ "HL",
+    TRUE ~ "LH"
+  )
+  
+  moran_df_price <- data.frame(
+    value = price_std,
+    lag_value = lag_price_std,
+    quadrant = quadrant_price
+  )
+  
+  moran_df_resid <- data.frame(
+    value = resid_std,
+    lag_value = lag_resid_std,
+    quadrant = quadrant_resid
+  )
+  
+  # Plot – Sale Price
+  p_moran_price <- ggplot(moran_df_price, aes(value, lag_value, color = quadrant)) +
+    geom_point(alpha = 0.4, size = 1) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_smooth(aes(group = 1), method = "lm", se = FALSE, 
+                color = "#67001F", linewidth = 1.2) +
+    scale_color_manual(
+      values = c("HH (High-High)" = "#67001F", 
+                 "LL (Low-Low)" = "#053061",
+                 "HL (High-Low)" = "#F4A582",
+                 "LH (Low-High)" = "#92C5DE"),
+      name = "Quadrant"
+    ) +
+    annotate("text", x = -3, y = 3, 
+             label = sprintf("Moran’s I = %.4f***", moran_price$estimate[1]),
+             size = 5, fontface = "bold", color = "#67001F") +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 11),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(
+      title = "Moran’s I Scatter Plot – Sale Price",
+      subtitle = "Strong positive spatial autocorrelation",
+      x = "Standardized Sale Price",
+      y = "Spatial Lag (Average of Neighbors)"
+    )
+  
+  # Plot – Residuals
+  p_moran_resid <- ggplot(moran_df_resid, aes(value, lag_value, color = quadrant)) +
+    geom_point(alpha = 0.4, size = 1) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+    geom_smooth(aes(group = 1), method = "lm", se = FALSE, 
+                color = "#67001F", linewidth = 1.2) +
+    scale_color_manual(
+      values = c("HH" = "#67001F", "LL" = "#053061",
+                 "HL" = "#F4A582", "LH" = "#92C5DE"),
+      name = "Quadrant"
+    ) +
+    annotate("text", x = -3, y = 3, 
+             label = sprintf("Moran’s I = %.4f%s", 
+                           moran_resid$estimate[1],
+                           ifelse(moran_resid$p.value < 0.001, "***",
+                                  ifelse(moran_resid$p.value < 0.05, "**", ""))),
+             size = 5, fontface = "bold", 
+             color = ifelse(moran_resid$p.value < 0.05, "#67001F", "gray50")) +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.subtitle = element_text(hjust = 0.5, size = 11),
+      legend.position = "right",
+      plot.background = element_rect(fill = "white", color = NA)
+    ) +
+    labs(
+      title = "Moran’s I Scatter Plot – Model 4 Residuals",
+      subtitle = ifelse(moran_resid$p.value < 0.05, 
+                       "Residual spatial autocorrelation detected",
+                       "No significant residual spatial autocorrelation"),
+      x = "Standardized Residual",
+      y = "Spatial Lag (Average of Neighbors)"
+    )
+  
+  # Combine plots
+  p_moran_combined <- (p_moran_price | p_moran_resid) +
+    plot_annotation(
+      title = "Spatial Autocorrelation Analysis (Moran’s I)",
+      subtitle = "Left: Original prices show strong clustering | Right: Model residuals",
+      theme = theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 12, hjust = 0.5),
+        plot.background = element_rect(fill = "white", color = NA)
+      )
+    )
+  
+  ggsave("plot/morans_i_scatter.png", p_moran_combined, 
+         width = 16, height = 7, dpi = 300, bg = "white")
+  cat("\n   plot/morans_i_scatter.png\n")
+  
+  # Save Moran’s I results
+  moran_summary <- data.frame(
+    Variable = c("Sale Price", "Model 4 Residuals"),
+    Morans_I = c(moran_price$estimate[1], moran_resid$estimate[1]),
+    Expected = c(moran_price$estimate[2], moran_resid$estimate[2]),
+    Variance = c(moran_price$estimate[3], moran_resid$estimate[3]),
+    Z_score = c(moran_price$statistic, moran_resid$statistic),
+    P_value = c(moran_price$p.value, moran_resid$p.value),
+    Significant = c(moran_price$p.value < 0.05, moran_resid$p.value < 0.05)
+  )
+  
+  write_csv(moran_summary, "file/morans_i_results.csv")
+  cat("  ✓ file/morans_i_results.csv\n")
+  
+} else {
+  cat(" Missing coordinate data – Moran’s I test cannot be performed\n")
+}
+```
+
+```{r}
+# =========================================================
+# Summary
+# =========================================================
+
+cat("\n", rep("=", 80), "\n", sep = "")
+cat(" Step 4 Supplement Completed\n")
+cat(rep("=", 80), "\n\n")
+
+cat(" Output Files:\n\n")
+cat("Tables:\n")
+if (exists("influential_data")) {
+  cat("  • file/influential_observations.csv – List of influential observations\n")
+}
+if (exists("moran_summary")) {
+  cat("  • file/morans_i_results.csv – Moran’s I test results\n")
+}
+
+cat("\nFigures:\n")
+cat("  • plot/cooks_distance.png – Cook’s Distance Scatter Plot\n")
+if (exists("p_moran_combined")) {
+  cat("  • plot/morans_i_scatter.png – Moran’s I Scatter Plot\n")
+}
+
+cat("\n Key Findings:\n")
+if (exists("moran_resid")) {
+  if (moran_resid$p.value < 0.05) {
+    cat("  ️ Significant spatial autocorrelation detected in residuals\n")
+    cat("     → The model did not fully capture spatial effects\n")
+    cat("     → Suggest using spatial econometric models (SAR/SEM)\n")
+  } else {
+    cat("   No significant spatial autocorrelation in residuals\n")
+    cat("     → Fixed effects adequately controlled for spatial dependence\n")
+  }
+}
+
+cat("\n")
+
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(forcats)
+library(patchwork)
+
+# tidytext
+if (!require("tidytext", quietly = TRUE)) {
+  reorder_within <- function(x, by, within, fun = mean, sep = "___", ...) {
+    new_x <- paste(x, within, sep = sep)
+    stats::reorder(new_x, by, FUN = fun)
+  }
+  
+  scale_x_reordered <- function(..., sep = "___") {
+    reg <- paste0(sep, ".+$")
+    ggplot2::scale_x_discrete(labels = function(x) gsub(reg, "", x), ...)
+  }
+  
+  scale_y_reordered <- function(..., sep = "___") {
+    reg <- paste0(sep, ".+$")
+    ggplot2::scale_y_discrete(labels = function(x) gsub(reg, "", x), ...)
+  }
+} else {
+  library(tidytext)
+}
+```
+
+```{r}
+# Read data
+df <- read_csv("./table/feature_importance_all_models.csv", show_col_types = FALSE)
+
+# Data cleaning
+df <- df %>%
+  mutate(
+    estimate = as.numeric(estimate),
+    abs_estimate = as.numeric(abs_estimate)
+  )
+
+# Variable classification
+df <- df %>%
+  mutate(
+    var_type = case_when(
+      grepl("census_tract|zip_code", term) ~ "Location Fixed Effects",
+      grepl("income|POVERTY", term) ~ "Socioeconomic",
+      grepl("bathroom|bedroom|livable_area", term) ~ "Structural",
+      grepl("age", term) ~ "Age",
+      grepl("coord|dist", term) ~ "Spatial",
+      TRUE ~ "Other"
+    ),
+    # Clean variable names
+    term_clean = case_when(
+      term == "number_of_bathrooms" ~ "Bathrooms",
+      term == "number_of_bedrooms" ~ "Bedrooms",
+      term == "total_livable_area" ~ "Livable Area",
+      term == "per_cap_incomeE" ~ "Per Capita Income",
+      term == "median_incomeE" ~ "Median Income",
+      term == "PCTPOVERTY" ~ "Poverty Rate",
+      term == "age2" ~ "Age²",
+      term == "dist_to_center" ~ "Distance to Center",
+      term == "x_coord" ~ "X Coordinate",
+      term == "y_coord" ~ "Y Coordinate",
+      grepl("census_tract", term) ~ gsub("census_tract", "Census Tract ", term),
+      grepl("zip_code", term) ~ gsub("zip_code", "ZIP ", term),
+      TRUE ~ term
+    )
+  )
+
+# Keep only top 10 most important variables per model
+top_features <- df %>%
+  group_by(Model) %>%
+  slice_max(abs_estimate, n = 10) %>%
+  ungroup()
+
+# Color palette (deep blue to deep red)
+color_palette <- c(
+  "Structural" = "#67001F",        # deep red
+  "Socioeconomic" = "#4393C3",     # medium blue  
+  "Age" = "#2166AC",               # darker blue
+  "Spatial" = "#053061",           # darkest blue
+  "Location Fixed Effects" = "#D6604D"  # reddish tone
+)
+
+cat("Generating visualization (using deep blue–deep red palette)...\n\n")
+
+```
+
+```{r}
+# ========== Figure 1: Lollipop Chart ==========
+cat("  Generating Figure 1: Lollipop chart...\n")
+
+p1 <- ggplot(top_features, aes(x = reorder_within(term_clean, abs_estimate, Model), 
+                                y = abs_estimate, color = var_type)) +
+  geom_segment(aes(xend = reorder_within(term_clean, abs_estimate, Model), yend = 0), 
+               size = 1.2, alpha = 0.7) +
+  geom_point(size = 4, alpha = 0.9) +
+  coord_flip() +
+  facet_wrap(~Model, scales = "free_y", ncol = 2) +
+  scale_x_reordered() +
+  scale_color_manual(values = color_palette, name = "Feature Type") +
+  labs(
+    title = "Feature Importance Across Progressive Models",
+    subtitle = "Lollipop chart showing top 10 features per model",
+    x = NULL,
+    y = "Absolute Coefficient"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    strip.text = element_text(face = "bold", size = 11),
+    strip.background = element_rect(fill = "gray95", color = NA),
+    legend.position = "bottom",
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray90", size = 0.3),
+    axis.text.y = element_text(size = 9),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+ggsave("plot/feature_importance_lollipop_v2.png", p1, 
+       width = 14, height = 10, dpi = 300, bg = "white")
+
+cat("    ✓ Saved to: plot/feature_importance_lollipop_v2.png\n")
+
+```
+
+```{r}
+# ========== Figure 2: Heatmap ==========
+cat("  Generating Figure 2: Heatmap...\n")
+
+heatmap_data <- df %>%
+  group_by(Model) %>%
+  slice_max(abs_estimate, n = 8) %>%
+  ungroup() %>%
+  mutate(Model_short = gsub("M[0-9]: ", "", Model))
+
+p2 <- ggplot(heatmap_data, aes(x = Model_short, y = fct_reorder(term_clean, abs_estimate), 
+                                fill = abs_estimate)) +
+  geom_tile(color = "white", size = 1) +
+  geom_text(aes(label = sprintf("%.3f", abs_estimate)), 
+            color = "white", size = 3.5, fontface = "bold") +
+  scale_fill_gradient2(
+    low = "#053061", mid = "#F7F7F7", high = "#67001F",
+    midpoint = median(heatmap_data$abs_estimate),
+    name = "Coefficient\nMagnitude"
+  ) +
+  labs(
+    title = "Feature Importance Heatmap Across Models",
+    subtitle = "Top 8 features per model (darker = stronger effect)",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 11),
+    axis.text.y = element_text(size = 10),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  )
+
+ggsave("plot/feature_importance_heatmap_v2.png", p2, 
+       width = 12, height = 8, dpi = 300, bg = "white")
+
+cat("    ✓ Saved to: plot/feature_importance_heatmap_v2.png\n")
+
+```
+
+
+```{r}
+# ========== Figure 3: Nightingale Rose Chart ==========
+cat("  Generating Figure 3: Nightingale rose chart...\n")
+
+models <- unique(top_features$Model)
+
+rose_plots <- lapply(models, function(m) {
+  data_m <- top_features %>%
+    filter(Model == m) %>%
+    arrange(desc(abs_estimate)) %>%
+    head(8) %>%
+    mutate(term_clean = factor(term_clean, levels = term_clean))
+  
+  ggplot(data_m, aes(x = term_clean, y = abs_estimate, fill = abs_estimate)) +
+    geom_col(width = 1, alpha = 0.9, color = "white", size = 0.5) +
+    coord_polar(theta = "x") +
+    scale_fill_gradient2(
+      low = "#4393C3", mid = "#F7F7F7", high = "#67001F",
+      midpoint = median(data_m$abs_estimate),
+      name = "Importance"
+    ) +
+    labs(title = m, x = NULL, y = NULL) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5, size = 11),
+      axis.text.y = element_blank(),
+      axis.text.x = element_text(size = 12, face = "bold"),
+      panel.grid.major = element_line(color = "gray90", size = 0.3),
+      panel.grid.minor = element_blank(),
+      legend.position = "none",
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+})
+
+p3 <- wrap_plots(rose_plots, ncol = 2) +
+  plot_annotation(
+    title = "Feature Importance: Nightingale Rose Chart",
+    subtitle = "Top 8 features visualized as rose petals (larger petal = more important)",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 18, hjust = 0.5),
+      plot.subtitle = element_text(size = 13, hjust = 0.5, color = "gray40"),
+      plot.background = element_rect(fill = "white", color = NA)
+    )
+  )
+
+ggsave("plot/feature_importance_rose_v2.png", p3, 
+       width = 14, height = 12, dpi = 300, bg = "white")
+
+cat("     Saved to: plot/feature_importance_rose_v2.png\n")
+
+```
+
+```{r}
+# Print Summary
+cat("\n==============================================\n")
+cat("🎨 All visualizations have been successfully generated! (Deep Blue–Red Palette)\n")
+cat("==============================================\n\n")
+cat("📊 Generated Figures:\n")
+cat("  1. feature_importance_lollipop_v2.png  - Lollipop Chart\n")
+cat("  2. feature_importance_heatmap_v2.png   - Heatmap\n")
+cat("  3. feature_importance_rose_v2.png      - Nightingale Rose Chart\n\n")
+cat("🎨 Color Palette (following Moran's I visualization):\n")
+cat("  • Structural: Deep Red (#67001F)\n")
+cat("  • Socioeconomic: Deep Blue (#4393C3)\n")
+cat("  • Age: Darker Blue (#2166AC)\n")
+cat("  • Spatial: Deepest Blue (#053061)\n")
+cat("  • Location FE: Reddish Tone (#D6604D)\n\n")
+
+```
+
+```{r}
+
+```
