@@ -7,7 +7,7 @@ project:
     - assignments/assignment_2/assignment2_Zicheng_Xiang.qmd
     - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Appendix.qmd
     - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
-    - assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis_REVISED.qmd
+    - assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis.qmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
@@ -45,7 +45,7 @@ website:
             text: "Assignment 3: Midterm Appendix"
           - href: assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
             text: "Assignment 3: Midterm Presentation"  
-          - href: assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis_REVISED.qmd
+          - href: assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis.qmd
             text: "Assignment 4: Spatial Predictive Analysis"  
 
 format:
