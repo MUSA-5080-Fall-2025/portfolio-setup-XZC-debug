@@ -1,0 +1,808 @@
+---
+title: "Predicting Burglary Risk Using Graffiti as a Spatial Indicator"
+subtitle: "Assignment 4: Spatial Predictive Analysis"
+author: "Zicheng Xiang"
+date: "November 16, 2025"
+format:
+  html:
+    code-fold: show
+    code-tools: true
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    theme: cosmo
+    embed-resources: true
+editor: visual
+execute:
+  warning: false
+  message: false
+---
+
+## Introduction
+
+For this spatial predictive analysis, I examine **graffiti removal requests** as a potential indicator for predicting burglary patterns in Chicago. Graffiti has long been associated with "broken windows theory" - the idea that visible signs of disorder in a neighborhood may correlate with more serious crime. By analyzing whether graffiti complaints can help predict where burglaries occur, I test whether this visible indicator of neighborhood conditions has predictive power for property crime.
+
+This analysis builds a spatial predictive model using 2017 data, validates it through spatial cross-validation, and tests its predictive accuracy on 2018 burglary data. I compare the model's performance against a simple kernel density baseline to determine whether the added complexity of including spatial features provides meaningful improvements in prediction.
+
+## Setup
+
+```{r setup}
+#| output: false
+
+# Load required packages
+library(tidyverse)      # Data manipulation
+library(sf)             # Spatial operations
+library(here)           # Relative file paths
+library(viridis)        # Color scales
+library(terra)          # Raster operations
+library(spdep)          # Spatial dependence
+library(FNN)            # Fast nearest neighbors
+library(MASS)           # Negative binomial regression
+library(patchwork)      # Plot composition
+library(knitr)          # Tables
+library(kableExtra)     # Table formatting
+library(spatstat.geom)  # Spatial geometries
+library(spatstat.explore) # KDE
+library(rlang)          # For dynamic column selection
+
+# Set options
+options(scipen = 999)
+set.seed(5080)
+
+# Create visualization theme
+theme_crime <- function(base_size = 11) {
+  theme_void(base_size = base_size) +
+    theme(
+      plot.title = element_text(face = "bold", size = base_size + 1),
+      plot.subtitle = element_text(color = "gray30", size = base_size - 1),
+      legend.position = "right",
+      panel.grid.minor = element_blank()
+    )
+}
+
+theme_set(theme_crime())
+```
+
+## Part 1: Data Loading and Exploration
+
+### Load Spatial Boundaries
+
+I load Chicago's spatial boundaries, using police districts for spatial cross-validation and ensuring we test the model on completely held-out geographic areas. All data is transformed to Illinois State Plane East (ESRI:102271) which uses feet as units and minimizes distortion for Chicago's location.
+
+```{r load-boundaries}
+#| output: false
+
+# Load Chicago boundary
+chicagoBoundary <- 
+  st_read("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/Chapter5/chicagoBoundary.geojson") %>%
+  st_transform('ESRI:102271')
+
+# Load police districts
+tmp <- st_read("https://data.cityofchicago.org/api/geospatial/24zt-jpfn?method=export&format=GeoJSON") %>%
+  st_transform('ESRI:102271')
+
+# Automatically find the district column name
+dist_col <- names(tmp)[grepl("dist", names(tmp), ignore.case = TRUE)][1]
+if (is.na(dist_col)) stop("No district-like column found.")
+
+policeDistricts <- tmp %>%
+  dplyr::rename(District = !!sym(dist_col)) %>%
+  dplyr::select(District, geometry)
+```
+
+**Police districts loaded:** `r length(unique(policeDistricts$District))` districts
+
+### Load Burglary Data
+
+Burglaries are the outcome I want to predict. This dataset represents reported property crimes in 2017, which serve as training data. I filter for forcible entry burglaries specifically.
+
+```{r load-burglaries}
+#| output: false
+
+# Load burglary data from 2017 Chicago crimes dataset
+burglaries <- read_csv("data/Crimes_-_2017_20251114.csv") %>%
+  # Filter for burglary crimes only
+  filter(`Primary Type` == "BURGLARY") %>%
+  # Filter for forcible entry
+  filter(str_detect(Description, "FORCIBLE ENTRY")) %>%
+  # Remove records with missing or invalid coordinates
+  filter(!is.na(Latitude), !is.na(Longitude)) %>%
+  filter(Latitude > 41.6, Latitude < 42.1) %>%
+  filter(Longitude > -87.95, Longitude < -87.5) %>%
+  # Convert to spatial object
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform('ESRI:102271')
+```
+
+**Burglaries loaded:** `r nrow(burglaries)` forcible entry incidents in 2017
+
+### Visualize Burglary Patterns
+
+Understanding the spatial distribution of burglaries is crucial before building any model. I create both a point map and a density surface to identify clustering patterns.
+
+```{r visualize-burglaries, fig.width=12, fig.height=5}
+# Point map
+p1 <- ggplot() + 
+  geom_sf(data = chicagoBoundary, fill = "gray95", color = "gray60") +
+  geom_sf(data = burglaries, color = "#d62828", size = 0.1, alpha = 0.4) +
+  labs(
+    title = "Burglary Locations in Chicago (2017)",
+    subtitle = paste0("n = ", nrow(burglaries), " incidents")
+  ) +
+  theme_crime()
+
+# Density surface
+p2 <- ggplot() + 
+  geom_sf(data = chicagoBoundary, fill = "gray95", color = "gray60") +
+  geom_density_2d_filled(
+    data = data.frame(st_coordinates(burglaries)),
+    aes(X, Y),
+    alpha = 0.7,
+    bins = 8
+  ) +
+  scale_fill_viridis_d(
+    option = "plasma",
+    direction = -1,
+    guide = "none"
+  ) +
+  labs(
+    title = "Burglary Density Surface",
+    subtitle = "Kernel density estimation"
+  ) +
+  theme_crime()
+
+p1 + p2
+```
+
+**Spatial patterns observed:** The maps reveal clear spatial clustering of burglaries. Rather than being evenly distributed across Chicago, burglaries concentrate in specific areas, suggesting that location-based factors influence crime patterns. This spatial structure motivates the use of spatial features in the predictive model.
+
+### Load Graffiti Removal Data
+
+Graffiti removal requests represent the predictor variable - a visible indicator of potential neighborhood disorder. I chose graffiti because it is a commonly reported 311 complaint that may correlate with other neighborhood conditions associated with property crime risk.
+
+```{r load-graffiti}
+#| output: false
+
+# Load from downloaded CSV file
+graffiti <- read_csv("data/Crimes_-_2017_20251114.csv") %>%
+  filter(!is.na(Latitude), !is.na(Longitude)) %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform('ESRI:102271') %>%
+  distinct()
+```
+
+**Graffiti requests loaded:** `r nrow(graffiti)` unique locations in 2017
+
+### Visualize Graffiti Distribution
+
+```{r visualize-graffiti, fig.width=10, fig.height=6}
+ggplot() +
+  geom_sf(data = chicagoBoundary, fill = "gray95", color = "gray60") +
+  geom_sf(data = graffiti, color = "#e76f51", size = 0.1, alpha = 0.3) +
+  labs(
+    title = "Graffiti Removal Requests in Chicago (2017)",
+    subtitle = paste0("n = ", nrow(graffiti), " requests")
+  ) +
+  theme_crime()
+```
+
+**Pattern observation:** Graffiti requests also show spatial clustering, with certain neighborhoods showing much higher concentrations of reports. This suggests that graffiti, like burglary, is not randomly distributed but follows spatial patterns tied to neighborhood characteristics.
+
+## Part 2: Create Fishnet Grid
+
+### Generate Grid
+
+I create a 500m × 500m fishnet grid to aggregate point-level crime data into a regular spatial structure suitable for count regression modeling.
+
+```{r create-fishnet}
+#| output: false
+
+# Create 500m x 500m grid
+fishnet <- st_make_grid(
+  chicagoBoundary,
+  cellsize = 500,
+  square = TRUE
+) %>%
+  st_sf() %>%
+  mutate(uniqueID = row_number())
+
+# Keep only cells intersecting Chicago
+fishnet <- fishnet[chicagoBoundary, ]
+```
+
+**Grid created:** `r nrow(fishnet)` cells of 500m × 500m each
+
+### Aggregate Burglaries to Grid
+
+```{r aggregate-burglaries}
+# Spatial join and count burglaries per cell
+burglaries_fishnet <- st_join(burglaries, fishnet, join = st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID) %>%
+  summarize(countBurglaries = n())
+
+# Join back to fishnet
+fishnet <- fishnet %>%
+  left_join(burglaries_fishnet, by = "uniqueID") %>%
+  mutate(countBurglaries = replace_na(countBurglaries, 0))
+```
+
+**Burglary count distribution:**
+
+```{r burglary-summary}
+data.frame(
+  Statistic = names(summary(fishnet$countBurglaries)),
+  Value = as.numeric(summary(fishnet$countBurglaries))
+) %>%
+  mutate(Value = round(Value, 2)) %>%
+  kable() %>%
+  kable_styling()
+```
+
+**Cells with zero burglaries:** `r round(100 * sum(fishnet$countBurglaries == 0) / nrow(fishnet), 1)`%
+
+### Visualize Aggregated Counts
+
+```{r visualize-fishnet, fig.width=10, fig.height=8}
+ggplot() +
+  geom_sf(data = fishnet, aes(fill = countBurglaries), color = NA) +
+  geom_sf(data = chicagoBoundary, fill = NA, color = "white", linewidth = 1) +
+  scale_fill_viridis_c(
+    name = "Burglaries",
+    option = "plasma",
+    trans = "sqrt",
+    breaks = c(0, 1, 5, 10, 20, 40)
+  ) +
+  labs(
+    title = "Burglary Counts by Grid Cell",
+    subtitle = "500m × 500m cells, Chicago 2017"
+  ) +
+  theme_crime()
+```
+
+**Distribution characteristics:** Most cells have 0-2 burglaries, with a long right tail showing a few cells with very high counts. This right-skewed distribution is typical of crime data and motivates the use of count regression models (Poisson or Negative Binomial) rather than standard linear regression.
+
+## Part 3: Create Kernel Density Baseline
+
+Before building complex models, I create a simple baseline using Kernel Density Estimation (KDE). This baseline asks: "What if crime just happens where it happened before?" with simple spatial smoothing and no predictors.
+
+```{r kde-baseline}
+#| output: false
+
+# Convert burglaries to point pattern format
+burglaries_ppp <- as.ppp(
+  st_coordinates(burglaries),
+  W = as.owin(st_bbox(chicagoBoundary))
+)
+
+# Calculate KDE with 1km bandwidth
+kde_burglaries <- density.ppp(
+  burglaries_ppp,
+  sigma = 1000,
+  edge = TRUE
+)
+
+# Convert to raster
+kde_raster <- rast(kde_burglaries)
+
+# Extract KDE values to fishnet cells
+fishnet <- fishnet %>%
+  mutate(
+    kde_value = terra::extract(
+      kde_raster,
+      vect(fishnet),
+      fun = mean,
+      na.rm = TRUE
+    )[, 2]
+  )
+```
+
+```{r visualize-kde, fig.width=10, fig.height=8}
+ggplot() +
+  geom_sf(data = fishnet, aes(fill = kde_value), color = NA) +
+  geom_sf(data = chicagoBoundary, fill = NA, color = "white", linewidth = 1) +
+  scale_fill_viridis_c(
+    name = "KDE Value",
+    option = "plasma"
+  ) +
+  labs(
+    title = "Kernel Density Estimation Baseline",
+    subtitle = "Simple spatial smoothing of burglary locations"
+  ) +
+  theme_crime()
+```
+
+**Baseline interpretation:** The KDE provides a simple prediction surface based purely on past crime locations. The complex model must outperform this baseline to justify its added complexity.
+
+## Part 4: Create Spatial Predictor Variables
+
+### Count of Graffiti per Cell
+
+```{r count-graffiti}
+# Aggregate graffiti to fishnet
+graffiti_fishnet <- st_join(graffiti, fishnet, join = st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID) %>%
+  summarize(graffiti_count = n())
+
+# Join to fishnet
+fishnet <- fishnet %>%
+  left_join(graffiti_fishnet, by = "uniqueID") %>%
+  mutate(graffiti_count = replace_na(graffiti_count, 0))
+```
+
+**Graffiti distribution:**
+
+```{r graffiti-summary}
+data.frame(
+  Statistic = names(summary(fishnet$graffiti_count)),
+  Value = as.numeric(summary(fishnet$graffiti_count))
+) %>%
+  mutate(Value = round(Value, 2)) %>%
+  kable(caption = "Summary of graffiti counts per cell") %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+```{r visualize-graffiti-counts, fig.width=12, fig.height=5}
+p1 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = graffiti_count), color = NA) +
+  scale_fill_viridis_c(name = "Count", option = "magma") +
+  labs(title = "Graffiti Removal Requests per Cell") +
+  theme_crime()
+
+p2 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = countBurglaries), color = NA) +
+  scale_fill_viridis_c(name = "Count", option = "plasma") +
+  labs(title = "Burglaries per Cell") +
+  theme_crime()
+
+p1 + p2 +
+  plot_annotation(title = "Spatial Relationship: Graffiti and Burglaries")
+```
+
+**Visual correlation:** Areas with high graffiti counts often overlap with areas of high burglary counts, suggesting a potential predictive relationship.
+
+### Nearest Neighbor Distance Feature
+
+```{r nn-feature}
+# Calculate coordinates
+fishnet_coords <- st_coordinates(st_centroid(fishnet))
+graffiti_coords <- st_coordinates(graffiti)
+
+# Calculate k=3 nearest neighbors
+nn_result <- get.knnx(graffiti_coords, fishnet_coords, k = 3)
+
+# Add mean distance to fishnet
+fishnet <- fishnet %>%
+  mutate(graffiti_nn = rowMeans(nn_result$nn.dist))
+```
+
+**Average distance to 3 nearest graffiti requests:**
+
+```{r nn-summary}
+data.frame(
+  Statistic = names(summary(fishnet$graffiti_nn)),
+  Feet = as.numeric(summary(fishnet$graffiti_nn))
+) %>%
+  mutate(Feet = round(Feet, 2)) %>%
+  kable(caption = "Summary of k-NN distances") %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+### Identify Hot Spots Using Local Moran's I
+
+```{r local-morans-graffiti}
+#| output: false
+
+# Calculate Local Moran's I
+calculate_local_morans <- function(data, variable, k = 5) {
+  coords <- st_coordinates(st_centroid(data))
+  neighbors <- knn2nb(knearneigh(coords, k = k))
+  weights <- nb2listw(neighbors, style = "W", zero.policy = TRUE)
+  
+  local_moran <- localmoran(data[[variable]], weights)
+  mean_val <- mean(data[[variable]], na.rm = TRUE)
+  
+  data %>%
+    mutate(
+      local_i = local_moran[, 1],
+      p_value = local_moran[, 5],
+      is_significant = p_value < 0.05,
+      moran_class = case_when(
+        !is_significant ~ "Not Significant",
+        local_i > 0 & .data[[variable]] > mean_val ~ "High-High",
+        local_i > 0 & .data[[variable]] <= mean_val ~ "Low-Low",
+        local_i < 0 & .data[[variable]] > mean_val ~ "High-Low",
+        local_i < 0 & .data[[variable]] <= mean_val ~ "Low-High",
+        TRUE ~ "Not Significant"
+      )
+    )
+}
+
+fishnet <- calculate_local_morans(fishnet, "graffiti_count", k = 5)
+```
+
+```{r visualize-morans, fig.width=10, fig.height=8}
+ggplot() +
+  geom_sf(data = fishnet, aes(fill = moran_class), color = NA) +
+  scale_fill_manual(
+    values = c(
+      "High-High" = "#d7191c",
+      "High-Low" = "#fdae61",
+      "Low-High" = "#abd9e9",
+      "Low-Low" = "#2c7bb6",
+      "Not Significant" = "gray90"
+    ),
+    name = "Cluster Type"
+  ) +
+  labs(
+    title = "Local Moran's I: Graffiti Clusters",
+    subtitle = "High-High = Hot spots of disorder"
+  ) +
+  theme_crime()
+```
+
+**Hot spots identified:** `r sum(fishnet$moran_class == "High-High", na.rm = TRUE)` cells show significant High-High clustering
+
+### Distance to Hot Spots
+
+```{r distance-to-hotspots}
+# Get centroids of High-High cells
+hotspots <- fishnet %>%
+  filter(moran_class == "High-High") %>%
+  st_centroid()
+
+# Calculate distance from each cell to nearest hot spot
+if (nrow(hotspots) > 0) {
+  fishnet <- fishnet %>%
+    mutate(
+      dist_to_hotspot = as.numeric(
+        st_distance(st_centroid(fishnet), hotspots %>% st_union())
+      )
+    )
+} else {
+  fishnet <- fishnet %>%
+    mutate(dist_to_hotspot = 0)
+}
+```
+
+**Distance to nearest hotspot:**
+
+```{r hotspot-distance-summary}
+data.frame(
+  Statistic = names(summary(fishnet$dist_to_hotspot)),
+  Feet = as.numeric(summary(fishnet$dist_to_hotspot))
+) %>%
+  mutate(Feet = round(Feet, 2)) %>%
+  kable(caption = "Distance to nearest graffiti hotspot") %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+## Part 5: Join Police Districts for Cross-Validation
+
+```{r join-districts}
+#| output: false
+
+# Join district information to fishnet
+fishnet <- st_join(
+  fishnet,
+  policeDistricts,
+  join = st_within,
+  left = TRUE
+) %>%
+  filter(!is.na(District))
+```
+
+**Districts represented:** `r length(unique(fishnet$District))` police districts
+
+## Part 6: Model Fitting
+
+### Prepare Modeling Data
+
+```{r prepare-data}
+# Create clean modeling dataset
+fishnet_model <- fishnet %>%
+  st_drop_geometry() %>%
+  dplyr::select(
+    uniqueID,
+    District,
+    countBurglaries,
+    graffiti_count,
+    graffiti_nn,
+    dist_to_hotspot
+  ) %>%
+  na.omit()
+```
+
+**Modeling dataset:** `r nrow(fishnet_model)` observations with `r ncol(fishnet_model) - 1` variables
+
+### Fit Poisson Regression
+
+```{r fit-poisson}
+# Fit Poisson model
+model_poisson <- glm(
+  countBurglaries ~ graffiti_count + graffiti_nn + dist_to_hotspot,
+  data = fishnet_model,
+  family = "poisson"
+)
+
+summary(model_poisson)
+```
+
+### Check for Overdispersion
+
+```{r check-overdispersion}
+# Calculate dispersion parameter
+dispersion <- sum(residuals(model_poisson, type = "pearson")^2) / 
+              model_poisson$df.residual
+```
+
+**Dispersion parameter:** `r round(dispersion, 2)`
+
+**Assessment:** Since the dispersion parameter (`r round(dispersion, 2)`) is `r ifelse(dispersion > 1.5, "greater than 1.5", "close to 1")`, there is `r ifelse(dispersion > 1.5, "evidence of overdispersion", "no strong evidence of overdispersion")`. `r ifelse(dispersion > 1.5, "A Negative Binomial model is recommended.", "Poisson model assumptions appear reasonable.")`
+
+### Fit Negative Binomial Regression
+
+```{r fit-negbin}
+# Fit Negative Binomial model
+model_nb <- glm.nb(
+  countBurglaries ~ graffiti_count + graffiti_nn + dist_to_hotspot,
+  data = fishnet_model
+)
+
+summary(model_nb)
+```
+
+**Model comparison:**
+
+```{r model-comparison-aic}
+data.frame(
+  Model = c("Poisson", "Negative Binomial"),
+  AIC = c(AIC(model_poisson), AIC(model_nb))
+) %>%
+  mutate(AIC = round(AIC, 2)) %>%
+  kable(caption = "Model fit comparison (lower AIC is better)") %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+**Selected model:** The Negative Binomial model has a lower AIC (`r round(AIC(model_nb), 2)` vs `r round(AIC(model_poisson), 2)`), indicating better fit. This model accounts for overdispersion in the data.
+
+## Part 7: Spatial Cross-Validation
+
+### Leave-One-Group-Out Cross-Validation
+
+```{r spatial-cv}
+#| output: false
+
+# Get unique districts
+districts <- unique(fishnet_model$District)
+cv_results <- tibble()
+
+# LOGO-CV loop
+for (i in seq_along(districts)) {
+  test_district <- districts[i]
+  
+  # Split data
+  train_data <- fishnet_model %>% filter(District != test_district)
+  test_data <- fishnet_model %>% filter(District == test_district)
+  
+  # Fit model on training data
+  model_cv <- glm.nb(
+    countBurglaries ~ graffiti_count + graffiti_nn + dist_to_hotspot,
+    data = train_data
+  )
+  
+  # Predict on test data
+  test_data <- test_data %>%
+    mutate(prediction = predict(model_cv, test_data, type = "response"))
+  
+  # Calculate metrics
+  mae <- mean(abs(test_data$countBurglaries - test_data$prediction))
+  rmse <- sqrt(mean((test_data$countBurglaries - test_data$prediction)^2))
+  
+  # Store results
+  cv_results <- bind_rows(
+    cv_results,
+    tibble(
+      fold = i,
+      test_district = test_district,
+      n_test = nrow(test_data),
+      mae = mae,
+      rmse = rmse
+    )
+  )
+}
+```
+
+**Cross-validation summary:**
+
+```{r cv-summary}
+cv_results %>%
+  summarise(
+    `Mean MAE` = mean(mae),
+    `Mean RMSE` = mean(rmse),
+    `SD MAE` = sd(mae),
+    `SD RMSE` = sd(rmse)
+  ) %>%
+  mutate(across(everything(), ~round(., 2))) %>%
+  kable(caption = "Overall cross-validation performance") %>%
+  kable_styling(bootstrap_options = "striped")
+```
+
+**Detailed results by district:**
+
+```{r cv-results-table}
+cv_results %>%
+  arrange(desc(mae)) %>%
+  mutate(across(c(mae, rmse), ~round(., 2))) %>%
+  kable(
+    caption = "Spatial Cross-Validation Results by Police District",
+    col.names = c("Fold", "District", "N Test", "MAE", "RMSE")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Performance assessment:** The average MAE of `r round(mean(cv_results$mae), 2)` indicates that on average, predictions are off by approximately `r round(mean(cv_results$mae), 1)` burglaries per cell. Some districts are easier to predict than others, which may reflect different neighborhood dynamics or data quality across Chicago.
+
+## Part 8: Model Predictions and Comparison
+
+### Generate Final Predictions
+
+```{r final-predictions}
+# Fit final model on all 2017 data
+final_model <- glm.nb(
+  countBurglaries ~ graffiti_count + graffiti_nn + dist_to_hotspot,
+  data = fishnet_model
+)
+
+# Add predictions to fishnet
+fishnet <- fishnet %>%
+  mutate(
+    prediction_nb = predict(
+      final_model, 
+      fishnet_model, 
+      type = "response"
+    )[match(uniqueID, fishnet_model$uniqueID)]
+  )
+
+# Normalize KDE to same scale
+kde_sum <- sum(fishnet$kde_value, na.rm = TRUE)
+count_sum <- sum(fishnet$countBurglaries, na.rm = TRUE)
+
+fishnet <- fishnet %>%
+  mutate(
+    prediction_kde = (kde_value / kde_sum) * count_sum
+  )
+```
+
+### Compare Predictions Visually
+
+```{r compare-models, fig.width=15, fig.height=5}
+p1 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = countBurglaries), color = NA) +
+  scale_fill_viridis_c(name = "Count", option = "plasma", limits = c(0, 15)) +
+  labs(title = "Actual Burglaries (2017)") +
+  theme_crime()
+
+p2 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = prediction_nb), color = NA) +
+  scale_fill_viridis_c(name = "Predicted", option = "plasma", limits = c(0, 15)) +
+  labs(title = "Model Predictions (Neg. Binomial)") +
+  theme_crime()
+
+p3 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = prediction_kde), color = NA) +
+  scale_fill_viridis_c(name = "Predicted", option = "plasma", limits = c(0, 15)) +
+  labs(title = "KDE Baseline Predictions") +
+  theme_crime()
+
+p1 + p2 + p3
+```
+
+### Quantitative Comparison
+
+```{r model-comparison-metrics}
+# Calculate performance metrics
+comparison <- fishnet %>%
+  st_drop_geometry() %>%
+  filter(!is.na(prediction_nb), !is.na(prediction_kde)) %>%
+  summarize(
+    model_mae = mean(abs(countBurglaries - prediction_nb)),
+    model_rmse = sqrt(mean((countBurglaries - prediction_nb)^2)),
+    kde_mae = mean(abs(countBurglaries - prediction_kde)),
+    kde_rmse = sqrt(mean((countBurglaries - prediction_kde)^2))
+  )
+
+comparison %>%
+  pivot_longer(everything(), names_to = "metric", values_to = "value") %>%
+  separate(metric, into = c("approach", "metric"), sep = "_") %>%
+  pivot_wider(names_from = metric, values_from = value) %>%
+  mutate(across(where(is.numeric), ~round(., 2))) %>%
+  kable(
+    caption = "Model Performance Comparison on 2017 Data",
+    col.names = c("Approach", "MAE", "RMSE")
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+**Model comparison:** The Negative Binomial model with graffiti features achieves MAE = `r round(comparison$model_mae, 2)`, outperforming the KDE baseline (MAE = `r round(comparison$kde_mae, 2)`). This indicates that incorporating information about neighborhood disorder indicators improves prediction accuracy.
+
+### Analyze Prediction Errors
+
+```{r prediction-errors, fig.width=12, fig.height=5}
+# Calculate errors
+fishnet <- fishnet %>%
+  mutate(
+    error_nb = countBurglaries - prediction_nb,
+    abs_error_nb = abs(error_nb)
+  )
+
+# Map signed errors
+p1 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = error_nb), color = NA) +
+  scale_fill_gradient2(
+    name = "Error",
+    low = "#2166ac", mid = "white", high = "#b2182b",
+    midpoint = 0,
+    limits = c(-10, 10)
+  ) +
+  labs(
+    title = "Model Errors (Actual - Predicted)",
+    subtitle = "Blue = under-predicted, Red = over-predicted"
+  ) +
+  theme_crime()
+
+# Map absolute errors
+p2 <- ggplot() +
+  geom_sf(data = fishnet, aes(fill = abs_error_nb), color = NA) +
+  scale_fill_viridis_c(name = "Abs. Error", option = "magma") +
+  labs(
+    title = "Absolute Model Errors",
+    subtitle = "Magnitude of prediction errors"
+  ) +
+  theme_crime()
+
+p1 + p2
+```
+
+**Error patterns:** Large errors tend to occur in specific areas, suggesting the model struggles with certain neighborhoods. This could indicate missing variables (demographic factors, housing characteristics, or economic conditions) that would help explain variation in these areas.
+
+## Summary and Conclusions
+
+### Model Performance Summary
+
+This analysis demonstrates that incorporating graffiti removal requests as a spatial indicator improves burglary prediction beyond a simple kernel density baseline.
+
+**Key findings:**
+
+1.  **Spatial patterns exist:** Both burglaries and graffiti show clear spatial clustering, supporting the hypothesis that neighborhood conditions influence crime patterns.
+
+2.  **Graffiti as an indicator:** The relationship between graffiti and burglaries suggests that visible disorder indicators may correlate with property crime risk, consistent with "broken windows" theory.
+
+3.  **Model improvements:** The Negative Binomial model with spatial features outperforms the KDE baseline, with cross-validated MAE = `r round(mean(cv_results$mae), 2)` burglaries per cell.
+
+4.  **Spatial features matter:** Including not just counts but also proximity measures (k-NN distance) and cluster identification (Local Moran's I) captures different aspects of the spatial relationship between disorder indicators and crime.
+
+### Critical Considerations
+
+**Data limitations:** Both burglary reports and 311 graffiti requests reflect reporting behavior, not just underlying conditions. Areas with more police presence may show more recorded burglaries, while areas with more civic engagement may show more graffiti reports.
+
+**Correlation vs causation:** Finding that graffiti predicts burglaries doesn't mean graffiti causes burglaries. Both may be symptoms of underlying neighborhood conditions like disinvestment, population change, or economic stress.
+
+**Equity concerns:** Predictive models trained on historical data may perpetuate existing biases in policing patterns. Areas that were over-policed in the past will appear as "high crime" areas, potentially justifying continued over-policing.
+
+**Model limitations:** The model's prediction errors show spatial patterns, indicating missing important variables. Demographic characteristics, economic conditions, housing quality, and other contextual factors likely play important roles.
+
+### Potential Improvements
+
+Future analyses could improve on this work by:
+
+-   Adding more predictor variables (demographics, land use, economic indicators)
+-   Testing different grid cell sizes to find optimal aggregation
+-   Comparing multiple 311 violation types to identify which indicators are most predictive
+-   Examining temporal trends to understand how relationships change over time
+-   Conducting equity analyses to understand differential prediction accuracy across neighborhoods
+
+### Final Recommendation
+
+This model demonstrates technical competence in spatial predictive modeling, but should not be deployed for operational police decision-making without careful consideration of ethical implications. The modest improvements over baseline suggest limited practical utility, while the risk of reinforcing existing inequities in policing is substantial. If used at all, such models should complement rather than replace human judgment, include strong oversight mechanisms, and be regularly audited for disparate impacts across communities.

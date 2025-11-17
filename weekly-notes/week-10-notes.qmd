@@ -1,0 +1,161 @@
+---
+title: "Week 10 Notes"
+date: "2025-11-10"
+---
+
+## Key Concepts Learned
+
+- **Logistic Regression for Binary Outcomes**: A method for predicting yes/no outcomes (0/1) rather than continuous values
+- **The Logistic Function**: Transforms linear predictions into probabilities constrained between 0 and 1: $p(X) = \frac{1}{1+e^{-(\beta_0 + \beta_1X_1 + ... + \beta_kX_k)}}$
+- **Log-Odds (Logit) Transformation**: The underlying linear relationship works with log-odds rather than raw probabilities
+- **Odds Ratios**: Exponentiated coefficients ($e^{\beta}$) that show how predictors affect the odds of an outcome
+  - OR > 1: predictor increases odds of outcome
+  - OR < 1: predictor decreases odds of outcome
+
+### Classification Metrics
+
+- **Confusion Matrix**: Framework for understanding model predictions vs. actual outcomes
+- **Accuracy**: Overall proportion of correct predictions (but can be misleading!)
+- **Sensitivity (Recall/True Positive Rate)**: Proportion of actual positives correctly identified
+- **Specificity (True Negative Rate)**: Proportion of actual negatives correctly identified
+- **Precision**: Proportion of predicted positives that are truly positive
+- **False Positive Rate**: 1 - Specificity
+
+### Advanced Evaluation
+
+- **ROC Curve**: Visualizes the trade-off between sensitivity and false positive rate across all possible thresholds
+- **AUC (Area Under Curve)**: Single metric summarizing overall model discrimination ability
+  - 0.9-1.0: Excellent
+  - 0.8-0.9: Good
+  - 0.7-0.8: Acceptable
+  - 0.5: Random guessing
+
+## Coding Techniques
+
+### Fitting Logistic Regression Models
+```r
+# Using glm() with family = binomial
+model <- glm(outcome ~ predictor1 + predictor2, 
+             data = dataset, 
+             family = binomial)
+
+# Getting predictions as probabilities
+predicted_prob <- predict(model, type = "response")
+```
+
+### Creating Predictions with Different Thresholds
+```r
+# Convert probabilities to binary predictions
+predicted_class <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Test different thresholds
+threshold <- 0.3
+predicted_class <- ifelse(predicted_prob > threshold, 1, 0)
+```
+
+### Calculating Performance Metrics
+```r
+# Confusion matrix
+conf_matrix <- table(Predicted = predicted_class, Actual = actual_outcome)
+
+# Sensitivity, Specificity, Precision
+sensitivity <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+precision <- TP / (TP + FP)
+```
+
+### ROC Curves and AUC
+```r
+library(pROC)
+
+# Create ROC object
+roc_obj <- roc(actual_outcome, predicted_prob)
+
+# Calculate AUC
+auc_value <- auc(roc_obj)
+
+# Plot ROC curve
+ggroc(roc_obj) +
+  geom_abline(slope = 1, intercept = 1, linetype = "dashed") +
+  labs(title = "ROC Curve",
+       x = "1 - Specificity (FPR)",
+       y = "Sensitivity (TPR)")
+```
+
+### Quarto Features Learned
+- Creating reveal.js presentation slides with HTML output
+- Embedding R code chunks with visualizations in slides
+- Using mathematical notation with LaTeX syntax in Quarto
+
+## Questions & Challenges
+
+- **Threshold selection in practice**: How do we systematically choose the "right" threshold when there are competing objectives? The lecture showed the trade-offs but determining optimal thresholds for real policy contexts seems complex.
+
+- **Interpreting odds ratios**: While I understand OR > 1 means increased odds, converting this to intuitive explanations for policymakers needs more practice.
+
+- **Handling class imbalance**: The lecture mentioned that accuracy can be misleading, especially with rare outcomes. What techniques exist to handle severely imbalanced datasets (e.g., 95% negative, 5% positive)?
+
+- **Group-specific thresholds**: The COMPAS case showed different groups need different thresholds for fairness. How do we implement this in practice? Is it legally/ethically acceptable to use different thresholds?
+
+- **Model diagnostics**: We learned extensive diagnostics for linear regression (residuals, influential points, etc.). What are the equivalent diagnostics for logistic regression?
+
+## Connections to Policy
+
+### Criminal Justice Applications
+- **Recidivism prediction**: Used for bail decisions, sentencing, and parole - but the COMPAS case demonstrates severe equity concerns
+- **Flight risk assessment**: Determining who can be released before trial
+- **Key insight**: A model can be "accurate" overall but perpetuate systemic bias through disparate false positive rates
+
+### Health Policy
+- **Disease screening programs**: Trade-off between catching all cases (high sensitivity) vs. minimizing unnecessary treatments (high specificity)
+- **Resource allocation**: Limited intervention slots require careful threshold selection to maximize impact
+- **Cost-benefit analysis**: Can quantify expected costs of different error types to guide decisions
+
+### Urban Planning & Social Services
+- **Program participation prediction**: Identifying who is most likely to benefit from interventions
+- **Blight prediction**: Targeting building inspections and interventions
+- **Equity consideration**: Must evaluate whether predictive models disadvantage certain neighborhoods or populations
+
+### Critical Policy Considerations
+
+1. **Transparency**: Stakeholders need to understand how predictions are made and what metrics are prioritized
+2. **Disparate Impact**: Overall accuracy masks potential harm to specific groups
+3. **Threshold Justification**: The choice of threshold reflects value judgments about relative costs of different errors
+4. **Recourse and Appeals**: People affected by algorithmic decisions need mechanisms to challenge predictions
+5. **Continuous Monitoring**: Model performance and fairness must be evaluated over time as populations and contexts change
+
+## Reflection
+
+### What Was Most Interesting
+
+The **COMPAS case study** was eye-opening. It perfectly illustrated how a seemingly "accurate" model (similar accuracy for Black and White defendants) can still perpetuate serious injustice through disparate false positive rates. The fact that Black defendants were twice as likely to be incorrectly labeled "high risk" shows why we must look beyond overall accuracy to group-specific performance metrics.
+
+The **threshold selection framework** was also fascinating - it made concrete something I hadn't fully appreciated: every threshold choice embeds a value judgment about the relative costs of false positives vs. false negatives. There's no "neutral" or purely technical choice.
+
+### How I'll Apply This Knowledge
+
+1. **Always disaggregate performance metrics by relevant subgroups** in any predictive modeling work, especially for policy applications affecting people's lives
+
+2. **Be skeptical of single accuracy metrics** - they can hide more than they reveal
+
+3. **Document threshold choices explicitly**, including:
+   - What metrics were prioritized and why
+   - What stakeholder perspectives were considered
+   - What trade-offs were made
+   - How costs of different errors were weighted
+
+4. **Build in transparency and recourse mechanisms** when deploying predictive models in policy contexts
+
+5. **Consider whether prediction is even appropriate** - some decisions may be too consequential or too subject to bias to delegate to algorithms
+
+### Personal Growth Areas
+
+I need more practice with:
+- Communicating odds ratios intuitively to non-technical audiences
+- Implementing fairness-aware machine learning techniques
+- Conducting thorough model diagnostics for logistic regression
+- Handling severely imbalanced datasets effectively
+
+### Broader Implications
+
+This week reinforced that **data science for policy is fundamentally different from data science for commercial applications**. The stakes are higher, the need for fairness is paramount, and technical accuracy must be balanced against equity, transparency, and human dignity. As policy analysts, we have an obligation to interrogate our models for potential harm, not just optimize for predictive performance.
