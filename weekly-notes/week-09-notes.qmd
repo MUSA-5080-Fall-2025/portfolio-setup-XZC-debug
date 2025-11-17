@@ -6,7 +6,9 @@ date: "2025-11-3"
 ## Key Concepts Learned
 - [List main concepts from lecture]
 - [Technical skills covered]
+The lecture examines predictive policing from both a technical and ethical perspective. While predictive models promise efficiency, objectivity, and proactive crime prevention, they rely heavily on crime data that is often incomplete, biased, or manipulated (“dirty data”). Examples from cities like Baltimore, Chicago, and New York show how policing practices—false arrests, data downgrading, racial profiling, and reporting pressure—distort crime datasets. When such distorted data trains algorithms, predictive systems reinforce over-policing and create harmful feedback loops.
 
+The lecture argues that technical fixes (cleaning data, removing certain variables, better models) cannot solve deep social and institutional problems embedded within crime data. Predictive policing tends to amplify inequality, disproportionately burden marginalized communities, and fail to address root causes of crime. Students are encouraged to critically evaluate any predictive system by asking key questions about data provenance, variable selection, validation, deployment, transparency, and possible non-policing alternatives.
 
 
 ## Coding Techniques
