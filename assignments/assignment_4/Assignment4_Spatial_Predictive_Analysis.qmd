@@ -186,13 +186,13 @@ ggplot() +
   theme_crime()
 ```
 
-**Pattern observation:** Graffiti requests also show spatial clustering, with certain neighborhoods showing much higher concentrations of reports. This suggests that graffiti, like burglary, is not randomly distributed but follows spatial patterns tied to neighborhood characteristics.
+**Pattern observation:** Graffiti requests show clear spatial clustering across Chicago, indicating they follow neighborhood-level patterns similar to burglary.
 
 **What I did:** I loaded Chicago’s boundary and police districts and reprojected all layers into the Illinois State Plane East system to ensure consistent spatial measurement. I then imported and cleaned the 2017 burglary dataset, filtering specifically for forcible-entry incidents and converting them into sf points. I visualized these burglaries using point maps and kernel density estimation to explore their spatial distribution. Finally, I loaded the 2017 graffiti removal requests, removed duplicates, converted them into sf points, and mapped their spatial patterns.
 
-**Why this step is important:** This step prepares all spatial layers in a consistent coordinate system so that later operations—such as fishnet aggregation, distance calculations, and spatial cross-validation—are accurate. Exploring the raw data through maps helps determine whether burglary and graffiti exhibit meaningful spatial structure, which is necessary for constructing a predictive model. Graffiti represents a neighborhood disorder indicator that may explain variation in burglary risk, so confirming its coverage and spatial distribution is essential before building features.
+**Why this step is important:** Standardizing coordinate systems and exploring raw spatial patterns ensures accurate later analysis and verifies that graffiti provides meaningful spatial variation for burglary prediction.
 
-**What I learned:** Both burglary incidents and graffiti requests show strong clustering rather than random dispersion. Burglary hotspots appear along several central and southern corridors, while graffiti requests are dense in many of the same areas. The high volume of graffiti reports provides rich spatial variation when aggregated to grid cells. These patterns confirm that place-based conditions matter and that graffiti is a reasonable predictor for modeling burglary counts. This provides a solid foundation for constructing the fishnet features used in the next step.
+**What I learned:** Both burglary and graffiti exhibit strong spatial clustering, confirming that neighborhood context matters and supporting graffiti’s use as a predictor in the fishnet modeling step.
 
 ## Part 2: Create Fishnet Grid
 
@@ -266,15 +266,13 @@ ggplot() +
   theme_crime()
 ```
 
-**Distribution characteristics:** Most cells have 0-2 burglaries, with a long right tail showing a few cells with very high counts. This right-skewed distribution is typical of crime data and motivates the use of count regression models (Poisson or Negative Binomial) rather than standard linear regression.
+**Distribution characteristics:** Burglary counts across grid cells are heavily right-skewed, with most cells having 0–2 incidents and a small number forming a long high-count tail typical of crime data.
 
 **What I did:** I created a 500m × 500m fishnet grid covering the Chicago boundary and kept only the cells that intersect the city. This produced 2,458 uniform grid cells. I then performed a spatial join to count how many burglary incidents fell within each grid cell and merged these counts back into the fishnet. Finally, I summarized the distribution of burglary counts and mapped the aggregated values to visualize spatial variation at the grid-cell scale.
 
-**Why this step is important:** A fishnet converts point-level crime events into a regular spatial structure, which is essential for predictive modeling. Regression models require each observation to represent a consistent spatial unit, and the grid ensures every cell has the same size and comparable meaning. Aggregating burglaries to grid cells also helps reduce noise in point data, revealing broader spatial patterns. Examining the distribution of counts is necessary for selecting an appropriate modeling approach; crime data typically exhibit overdispersion, which affects whether Poisson or Negative Binomial models are more suitable.
+**Why this step is important:** Using a uniform grid provides consistent spatial units for regression, reduces point-level noise, and reveals distributional patterns needed to choose appropriate count models.
 
-**What I learned:** Spatial aggregation reveals strong variation across the city even after smoothing point data into grid cells. Most grid cells contain between 0 and 2 burglaries, while a smaller number of cells have much higher counts, reaching up to 41 incidents. Roughly 30% of the cells contain zero burglaries, while a few hotspots dominate the upper tail of the distribution. This right-skewed pattern is typical of crime data and confirms the need for count-based models rather than linear models.
-The map also shows that burglary risk remains spatially clustered even after aggregation, indicating that neighborhood characteristics at the 500m scale are meaningful and appropriate for prediction.
-
+**What I learned:** Burglary remains highly clustered even after aggregation, with many zero-count cells and a few extreme hotspots, reinforcing the need for Poisson or Negative Binomial modeling.
 
 ## Part 3: Create Kernel Density Baseline
 
@@ -330,9 +328,9 @@ ggplot() +
 
 **What I did:** I converted the burglary point locations into a point pattern object and computed a Kernel Density Estimation (KDE) surface using a 1 km bandwidth. This produced a smoothed crime-intensity raster that reflects where burglaries have historically concentrated. I then extracted mean KDE values for each fishnet cell, integrating this baseline predictor into the dataset. Finally, I visualized the KDE surface over Chicago to examine the resulting spatial pattern.
 
-**Why this step is important:** KDE provides the simplest possible spatial prediction model: it assumes that future crime is most likely to occur where past crime was concentrated, with smoothing to account for local diffusion. This creates an essential benchmark model. Any more complex predictive model—including those using graffiti or other features—should outperform this KDE baseline to justify the added complexity. KDE also helps capture large-scale spatial trends that might be difficult to learn from sparse count data alone.
+**Why this step is important:** KDE provides a fundamental benchmark by capturing where crime has historically concentrated, and any advanced model must surpass this baseline while leveraging additional predictors.
 
-**What I learned:** The KDE surface highlights broad, continuous hotspots across Chicago, especially in the central and near-south regions, which aligns with both the raw point distribution and the aggregated burglary counts. Because KDE smooths over local noise, it produces a stable risk surface that looks less fragmented than the fishnet counts. This confirms that burglary risk has strong spatial structure and spatial autocorrelation. It also reinforces the need for models that can capture both local indicator variables (e.g., graffiti) and larger-scale spatial patterns. The KDE results serve as a realistic, non-trivial baseline that any predictive model must exceed.
+**What I learned:** The KDE surface reveals broad, coherent hotspots and strong spatial autocorrelation, confirming spatial structure in burglary risk and the need for models that combine local indicators with large-scale spatial trends.
 
 
 ## Part 4: Create Spatial Predictor Variables
@@ -501,9 +499,9 @@ data.frame(
 
 **What I did:** I counted how many graffiti removal requests occurred in each grid cell. I then compared this map with burglary counts to see if the patterns matched. I also calculated how close each cell is to nearby graffiti using k-nearest neighbors. To capture clustering, I ran Local Moran’s I to find “High-High” graffiti hotspots and then measured how far each cell is from the nearest hotspot.
 
-**Why this step is important:** These steps create the predictor variables that the model will use. Graffiti counts show how much disorder is inside each cell, while the distance measures show how close a cell is to surrounding disorder. The hotspot analysis identifies areas where graffiti is unusually concentrated—information that may help explain where burglaries happen.
+**Why this step is important:** These steps generate key predictors—graffiti intensity, proximity, and hotspots—that capture different dimensions of neighborhood disorder relevant for explaining burglary patterns.
 
-**What I learned:** Graffiti is highly uneven across the city: some cells have almost none, while others have extremely high counts. Areas with lots of graffiti often overlap with areas of high burglary, which suggests a possible relationship. The nearest-neighbor distances show that most cells are still close to some graffiti activity. The hotspot map highlights several clear clusters of disorder, many in areas that also see more burglary. Overall, these graffiti-based features seem useful for predicting burglary patterns.
+**What I learned:** Graffiti is highly uneven and clustered, often overlapping with burglary hotspots, and its intensity, proximity, and hotspot features appear useful for predicting burglary risk.
 
 ## Part 5: Join Police Districts for Cross-Validation
 
