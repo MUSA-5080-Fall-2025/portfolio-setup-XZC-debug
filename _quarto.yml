@@ -8,6 +8,7 @@ project:
     - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Appendix.qmd
     - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
     - assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis.qmd
+    - assignments/assignment_5/HW5_Complete_Solution (9).rmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
@@ -47,6 +48,8 @@ website:
             text: "Assignment 3: Midterm Presentation"  
           - href: assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis.qmd
             text: "Assignment 4: Spatial Predictive Analysis"  
+          - href: assignments/assignment_5/HW5_Complete_Solution (9).rmd
+            text: "Assignment 5: Space-Time Prediction of Bike Share Demand: Philadelphia Indego" 
 
 format:
   html:
