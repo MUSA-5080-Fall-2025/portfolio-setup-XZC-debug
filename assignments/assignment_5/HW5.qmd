@@ -1,0 +1,825 @@
+---
+title: "HW5: Bike Share Demand Prediction - Q3 2024"
+subtitle: "Complete Space-Time Analysis"
+author: "Fang Zhe"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    theme: cosmo
+    self-contained: true
+execute:
+  warning: false
+  message: false
+---
+
+# Setup
+
+```{r setup}
+#| message: false
+library(tidyverse)
+library(lubridate)
+library(sf)
+library(tigris)
+library(tidycensus)
+library(riem)
+library(viridis)
+library(knitr)
+library(kableExtra)
+library(MASS)
+library(zoo)
+
+options(scipen = 999)
+
+# Plot themes
+plotTheme <- theme(
+  plot.title = element_text(size = 14, face = "bold"),
+  plot.subtitle = element_text(size = 10),
+  axis.title = element_text(size = 10, face = "bold"),
+  axis.text = element_text(size = 9),
+  legend.position = "right"
+)
+
+mapTheme <- theme(
+  plot.title = element_text(size = 14, face = "bold"),
+  axis.line = element_blank(),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  axis.title = element_blank(),
+  panel.background = element_blank(),
+  legend.position = "right"
+)
+
+# Census API key - CHANGE THIS TO YOUR KEY
+census_api_key("52672d930a0de492f5df5d49a36554782fa8f1ef", 
+               overwrite = TRUE, install = TRUE)
+```
+
+---
+
+# Part 1: Data Loading
+
+## Load Indego Trip Data (Q3 2024)
+
+**Selected Quarter:** Q3 2024 (July - September)
+
+**Why Q3 2024?**
+
+I chose Q3 2024 (July-September) because:
+1. Summer represents peak biking season with highest ridership
+2. Provides contrast to Q1 winter data (different weather patterns)
+3. Includes major holidays (July 4th, Labor Day) to test holiday effects
+4. Warm weather reduces weather-related variability, making other factors more visible
+
+```{r load_indego}
+# Read Q3 2024 data
+indego_hw <- read_csv("data/indego-trips-2024-q3.csv")
+
+cat("Total trips in Q3 2024:", format(nrow(indego_hw), big.mark = ","), "\n")
+cat("Date range:", 
+    min(mdy_hm(indego_hw$start_time)), "to", 
+    max(mdy_hm(indego_hw$start_time)), "\n")
+```
+
+## Create Time Features
+
+```{r time_features}
+indego_hw <- indego_hw %>%
+  mutate(
+    start_datetime = mdy_hm(start_time),
+    end_datetime = mdy_hm(end_time),
+    interval60 = floor_date(start_datetime, unit = "hour"),
+    week = week(interval60),
+    month = month(interval60, label = TRUE),
+    dotw = wday(interval60, label = TRUE),
+    hour = hour(interval60),
+    date = as.Date(interval60),
+    weekend = ifelse(dotw %in% c("Sat", "Sun"), 1, 0),
+    rush_hour = ifelse(hour %in% c(7, 8, 9, 16, 17, 18), 1, 0)
+  )
+
+cat("Time features created successfully!\n")
+```
+
+## Get Weather Data
+
+```{r weather_data}
+# Get Q3 2024 weather from Philadelphia Airport
+weather_hw <- riem_measures(
+  station = "PHL",
+  date_start = "2024-07-01",
+  date_end = "2024-09-30"
+)
+
+# Process weather
+weather_processed_hw <- weather_hw %>%
+  dplyr::mutate(
+    interval60 = floor_date(valid, unit = "hour"),
+    Temperature = tmpf,
+    Precipitation = ifelse(is.na(p01i), 0, p01i),
+    Wind_Speed = sknt
+  ) %>%
+  dplyr::select(interval60, Temperature, Precipitation, Wind_Speed) %>%
+  dplyr::distinct()
+
+# Fill missing hours
+weather_complete_hw <- weather_processed_hw %>%
+  complete(interval60 = seq(min(interval60), max(interval60), by = "hour")) %>%
+  fill(Temperature, Precipitation, Wind_Speed, .direction = "down")
+
+cat("Weather data downloaded successfully!\n")
+cat("Temperature range:", round(min(weather_complete_hw$Temperature, na.rm = TRUE), 1), 
+    "to", round(max(weather_complete_hw$Temperature, na.rm = TRUE), 1), "°F\n")
+```
+
+## Get Census Data
+```{r census_data}
+#| output: false
+# Get Philadelphia census tracts
+philly_census_hw <- get_acs(
+  geography = "tract",
+  variables = c(
+    "B01003_001",  # Total population
+    "B19013_001",  # Median household income
+    "B08301_001",  # Total commuters
+    "B08301_010",  # Commute by transit
+    "B02001_002"   # White alone
+  ),
+  state = "PA",
+  county = "Philadelphia",
+  year = 2022,
+  geometry = TRUE,
+  output = "wide"
+) %>%
+  rename(
+    Total_Pop = B01003_001E,
+    Med_Inc = B19013_001E,
+    Total_Commuters = B08301_001E,
+    Transit_Commuters = B08301_010E,
+    White_Pop = B02001_002E
+  ) %>%
+  mutate(
+    Percent_Taking_Public_Trans = (Transit_Commuters / Total_Commuters) * 100,
+    Percent_White = (White_Pop / Total_Pop) * 100
+  ) %>%
+  st_transform(crs = 4326) %>%
+  st_buffer(0)  # FIX: Repair invalid geometries
+
+cat("Census data downloaded successfully!\n")
+```
+
+## Join Census to Stations
+
+```{r join_census}
+# Get unique stations as sf object
+stations_sf_hw <- indego_hw %>%
+  distinct(start_station, start_lat, start_lon) %>%
+  filter(!is.na(start_lat), !is.na(start_lon), !is.na(start_station)) %>%
+  mutate(start_station = as.character(start_station)) %>%
+  st_as_sf(coords = c("start_lon", "start_lat"), crs = 4326)
+
+# Spatial join
+stations_census_hw <- st_join(stations_sf_hw, philly_census_hw, left = TRUE) %>%
+  st_drop_geometry()
+
+# Filter to valid stations
+valid_stations_hw <- stations_census_hw %>%
+  filter(!is.na(Med_Inc)) %>%
+  pull(start_station)
+
+# Join to trip data
+indego_census_hw <- indego_hw %>%
+  filter(!is.na(start_station)) %>%
+  mutate(start_station = as.character(start_station)) %>%
+  filter(start_station %in% valid_stations_hw) %>%
+  left_join(
+  stations_census_hw,
+  by = "start_station"
+)
+
+cat("Stations with census data:", length(valid_stations_hw), "\n")
+cat("Trips successfully joined:", format(nrow(indego_census_hw), big.mark = ","), "\n")
+```
+
+## Create Station-Hour Panel
+
+```{r create_panel}
+# Aggregate to station-hour
+ride_hw <- indego_census_hw %>%
+  group_by(start_station, interval60, start_lat, start_lon,
+           Med_Inc, Percent_Taking_Public_Trans, Percent_White, Total_Pop) %>%
+  summarize(Trip_Count = n(), .groups = "drop") %>%
+  mutate(
+    week = week(interval60),
+    month = month(interval60, label = TRUE),
+    dotw = wday(interval60, label = TRUE),
+    dotw_simple = ifelse(dotw %in% c("Sat", "Sun"), "Weekend", "Weekday"),
+    hour = hour(interval60),
+    date = as.Date(interval60),
+    weekend = ifelse(dotw %in% c("Sat", "Sun"), 1, 0),
+    rush_hour = ifelse(hour %in% c(7, 8, 9, 16, 17, 18), 1, 0)
+  )
+
+# Join weather
+ride_hw <- ride_hw %>%
+  left_join(weather_complete_hw, by = "interval60")
+
+cat("Panel observations:", format(nrow(ride_hw), big.mark = ","), "\n")
+```
+
+## Create Temporal Lags
+
+```{r temporal_lags}
+ride_hw <- ride_hw %>%
+  arrange(start_station, interval60) %>%
+  group_by(start_station) %>%
+  mutate(
+    lag1Hour = lag(Trip_Count, 1),
+    lag3Hours = lag(Trip_Count, 3),
+    lag1day = lag(Trip_Count, 24)
+  ) %>%
+  ungroup()
+
+cat("Temporal lags created!\n")
+```
+
+## Train/Test Split
+
+```{r train_test}
+# FIX: Remove NA from lags BEFORE splitting
+ride_hw_clean <- ride_hw %>%
+  filter(!is.na(lag1Hour), !is.na(lag3Hours), !is.na(lag1day))
+
+# Split: 70% train, 30% test by date
+set.seed(123)
+train_dates_hw <- sample(unique(ride_hw_clean$date), 
+                         size = round(length(unique(ride_hw_clean$date)) * 0.7))
+
+train_hw <- ride_hw_clean %>%
+  filter(date %in% train_dates_hw)
+
+test_hw <- ride_hw_clean %>%
+  filter(!date %in% train_dates_hw)
+
+cat("Training obs:", format(nrow(train_hw), big.mark = ","), "\n")
+cat("Testing obs:", format(nrow(test_hw), big.mark = ","), "\n")
+cat("Training dates:", length(unique(train_hw$date)), "\n")
+cat("Testing dates:", length(unique(test_hw$date)), "\n")
+```
+
+---
+
+# Part 1: Build Models 1-5
+
+## Model 1: Time + Weather
+
+```{r model1}
+model1_hw <- lm(
+  Trip_Count ~ hour + Temperature + Precipitation + weekend,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred1 = predict(model1_hw, newdata = test_hw))
+
+mae1 <- mean(abs(test_hw$Trip_Count - test_hw$pred1), na.rm = TRUE)
+cat("Model 1 MAE:", round(mae1, 3), "\n")
+```
+
+## Model 2: + Temporal Lags
+
+```{r model2}
+model2_hw <- lm(
+  Trip_Count ~ hour + Temperature + Precipitation + weekend +
+    lag1Hour + lag3Hours + lag1day,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred2 = predict(model2_hw, newdata = test_hw))
+
+mae2 <- mean(abs(test_hw$Trip_Count - test_hw$pred2), na.rm = TRUE)
+cat("Model 2 MAE:", round(mae2, 3), "\n")
+cat("Improvement:", round((mae1 - mae2) / mae1 * 100, 1), "%\n")
+```
+
+## Model 3: + Demographics
+
+```{r model3}
+model3_hw <- lm(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    Percent_Taking_Public_Trans + Percent_White + Med_Inc,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred3 = predict(model3_hw, newdata = test_hw))
+
+mae3 <- mean(abs(test_hw$Trip_Count - test_hw$pred3), na.rm = TRUE)
+cat("Model 3 MAE:", round(mae3, 3), "\n")
+cat("Improvement:", round((mae1 - mae3) / mae1 * 100, 1), "%\n")
+```
+
+## Model 4: + Station Fixed Effects
+
+```{r model4}
+cat("Training Model 4 (this takes 3-5 minutes)...\n")
+
+model4_hw <- lm(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    Percent_Taking_Public_Trans + Percent_White + Med_Inc +
+    as.factor(start_station),
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred4 = predict(model4_hw, newdata = test_hw))
+
+mae4 <- mean(abs(test_hw$Trip_Count - test_hw$pred4), na.rm = TRUE)
+cat("Model 4 MAE:", round(mae4, 3), "\n")
+cat("Improvement:", round((mae1 - mae4) / mae1 * 100, 1), "%\n")
+```
+
+## Model 5: + Rush Hour Interaction
+
+```{r model5}
+model5_hw <- lm(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    Percent_Taking_Public_Trans + Percent_White + Med_Inc +
+    as.factor(start_station) +
+    rush_hour * Temperature,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred5 = predict(model5_hw, newdata = test_hw))
+
+mae5 <- mean(abs(test_hw$Trip_Count - test_hw$pred5), na.rm = TRUE)
+cat("Model 5 MAE:", round(mae5, 3), "\n")
+cat("Improvement from baseline:", round((mae1 - mae5) / mae1 * 100, 1), "%\n")
+```
+
+## Model Comparison
+
+```{r model_comparison}
+mae_results_hw <- tibble(
+  Model = c(
+    "1. Time + Weather",
+    "2. + Temporal Lags", 
+    "3. + Demographics",
+    "4. + Station FE",
+    "5. + Rush Hour Int"
+  ),
+  MAE = c(mae1, mae2, mae3, mae4, mae5)
+) %>%
+  mutate(
+    Improvement = round((first(MAE) - MAE) / first(MAE) * 100, 1),
+    Rank = rank(MAE)
+  )
+
+kable(mae_results_hw, digits = 3,
+      caption = "Table 1: Model Performance Comparison - Q3 2024") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+ggplot(mae_results_hw, aes(x = reorder(Model, -MAE), y = MAE)) +
+  geom_col(fill = "#3182bd", alpha = 0.8) +
+  geom_text(aes(label = round(MAE, 3)), hjust = -0.1, size = 4) +
+  coord_flip() +
+  labs(
+    title = "Model Performance Comparison - Q3 2024",
+    subtitle = "Lower MAE = Better Prediction",
+    x = "",
+    y = "Mean Absolute Error (trips per hour)"
+  ) +
+  plotTheme +
+  theme(axis.text.y = element_text(size = 10))
+```
+
+---
+
+# Part 2: Error Analysis
+
+## Calculate Errors
+
+```{r errors}
+test_hw <- test_hw %>%
+  mutate(
+    error = Trip_Count - pred5,
+    abs_error = abs(error),
+    pct_error = abs_error / (Trip_Count + 1) * 100,
+    time_of_day = case_when(
+      hour < 7 ~ "1. Overnight",
+      hour >= 7 & hour < 10 ~ "2. AM Rush",
+      hour >= 10 & hour < 15 ~ "3. Mid-Day",
+      hour >= 15 & hour <= 18 ~ "4. PM Rush",
+      hour > 18 ~ "5. Evening"
+    )
+  )
+```
+
+## Temporal Error Patterns
+
+### Error by Time of Day
+
+```{r temporal_errors}
+time_errors_hw <- test_hw %>%
+  group_by(time_of_day) %>%
+  summarize(
+    MAE = mean(abs_error, na.rm = TRUE),
+    Avg_Demand = mean(Trip_Count, na.rm = TRUE),
+    Observations = n()
+  ) %>%
+  arrange(time_of_day)
+
+kable(time_errors_hw, digits = 2,
+      caption = "Table 2: Prediction Error by Time of Day") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+ggplot(time_errors_hw, aes(x = time_of_day, y = MAE)) +
+  geom_col(fill = "#756bb1", alpha = 0.8) +
+  geom_text(aes(label = round(MAE, 2)), vjust = -0.5) +
+  labs(
+    title = "Prediction Error by Time of Day - Q3 2024",
+    subtitle = "When is the model most/least accurate?",
+    x = "Time of Day",
+    y = "Mean Absolute Error"
+  ) +
+  plotTheme +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Error by Day of Week
+
+```{r dow_errors}
+dow_errors_hw <- test_hw %>%
+  group_by(dotw) %>%
+  summarize(
+    MAE = mean(abs_error, na.rm = TRUE),
+    Avg_Demand = mean(Trip_Count, na.rm = TRUE),
+    Over_Prediction = mean(error[error > 0], na.rm = TRUE),
+    Under_Prediction = mean(error[error < 0], na.rm = TRUE)
+  )
+
+ggplot(dow_errors_hw, aes(x = dotw, y = MAE, group = 1)) +
+  geom_line(color = "#08519c", linewidth = 1.2) +
+  geom_point(size = 3, color = "#08519c") +
+  labs(
+    title = "Prediction Error by Day of Week",
+    x = "Day of Week",
+    y = "MAE"
+  ) +
+  plotTheme
+```
+
+## Demographic Error Patterns
+
+### Error by Income Level
+
+```{r income_errors}
+income_errors_hw <- test_hw %>%
+  mutate(
+    income_group = cut(Med_Inc, 
+                       breaks = quantile(Med_Inc, c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                       labels = c("Low Income", "Middle Income", "High Income"),
+                       include.lowest = TRUE)
+  ) %>%
+  group_by(income_group) %>%
+  summarize(
+    MAE = mean(abs_error, na.rm = TRUE),
+    Avg_Demand = mean(Trip_Count, na.rm = TRUE),
+    Num_Stations = n_distinct(start_station),
+    .groups = "drop"
+  )
+
+kable(income_errors_hw, digits = 2,
+      caption = "Table 3: Prediction Error by Neighborhood Income") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+ggplot(income_errors_hw, aes(x = income_group, y = MAE, fill = income_group)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = round(MAE, 2)), vjust = -0.5) +
+  scale_fill_brewer(palette = "Blues") +
+  labs(
+    title = "Prediction Error by Neighborhood Income Level",
+    subtitle = "Equity analysis: Do errors differ by socioeconomic status?",
+    x = "Income Group",
+    y = "MAE",
+    fill = ""
+  ) +
+  plotTheme +
+  theme(legend.position = "none")
+```
+```{r spatial_error_map}
+# Calculate average error by station
+station_errors <- test_hw %>%
+  group_by(start_station, start_lat, start_lon) %>%
+  summarize(
+    Avg_MAE = mean(abs_error, na.rm = TRUE),
+    Total_Trips = n(),
+    .groups = "drop"
+  )
+
+# Create sf object
+station_errors_sf <- station_errors %>%
+  st_as_sf(coords = c("start_lon", "start_lat"), crs = 4326)
+
+# Plot error map
+ggplot() +
+  geom_sf(data = station_errors_sf, 
+          aes(color = Avg_MAE, size = Avg_MAE), 
+          alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma", name = "Average MAE") +
+  scale_size_continuous(range = c(1, 6), guide = "none") +
+  labs(
+    title = "Spatial Distribution of Prediction Errors",
+    subtitle = "Larger/redder points = higher prediction error"
+  ) +
+  mapTheme +
+  theme(legend.position = "right")
+
+# Identify worst stations
+worst_stations <- station_errors %>%
+  arrange(desc(Avg_MAE)) %>%
+  head(5)
+
+kable(worst_stations, digits = 2,
+      caption = "Top 5 Stations with Highest Prediction Error") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+### Error by Racial Composition
+
+```{r race_errors}
+race_errors_hw <- test_hw %>%
+  mutate(
+    majority_group = case_when(
+      Percent_White >= 50 ~ "Majority White",
+      Percent_White < 50 ~ "Majority Non-White"
+    )
+  ) %>%
+  group_by(majority_group) %>%
+  summarize(
+    MAE = mean(abs_error, na.rm = TRUE),
+    Avg_Demand = mean(Trip_Count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(race_errors_hw, aes(x = majority_group, y = MAE, fill = majority_group)) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = round(MAE, 2)), vjust = -0.5) +
+  scale_fill_manual(values = c("#3182bd", "#9ecae1")) +
+  labs(
+    title = "Prediction Error by Neighborhood Racial Composition",
+    x = "Neighborhood Type",
+    y = "MAE"
+  ) +
+  plotTheme +
+  theme(legend.position = "none")
+```
+
+---
+
+# Part 3: Feature Engineering
+
+## Create New Features
+
+```{r new_features}
+# Feature 1: Perfect Weather
+train_hw <- train_hw %>%
+  mutate(perfect_weather = ifelse(
+    Temperature >= 60 & Temperature <= 75 & Precipitation == 0, 1, 0
+  ))
+
+test_hw <- test_hw %>%
+  mutate(perfect_weather = ifelse(
+    Temperature >= 60 & Temperature <= 75 & Precipitation == 0, 1, 0
+  ))
+
+# Feature 2: Holidays (Q3 holidays)
+summer_holidays <- as.Date(c("2024-07-04", "2024-09-02"))
+
+train_hw <- train_hw %>%
+  mutate(is_holiday = ifelse(date %in% summer_holidays, 1, 0))
+
+test_hw <- test_hw %>%
+  mutate(is_holiday = ifelse(date %in% summer_holidays, 1, 0))
+
+# Feature 3: Weekend + Nice Weather
+train_hw <- train_hw %>%
+  mutate(weekend_nice = weekend * perfect_weather)
+
+test_hw <- test_hw %>%
+  mutate(weekend_nice = weekend * perfect_weather)
+
+cat("New features created:\n")
+cat("- Perfect weather (60-75°F, no rain)\n")
+cat("- Holiday indicator\n")
+cat("- Weekend + nice weather interaction\n")
+```
+
+## Model 6: With New Features
+
+```{r model6}
+model6_hw <- lm(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    Percent_Taking_Public_Trans + Percent_White + Med_Inc +
+    as.factor(start_station) +
+    rush_hour * Temperature +
+    perfect_weather + is_holiday + weekend_nice,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(pred6 = predict(model6_hw, newdata = test_hw))
+
+mae6 <- mean(abs(test_hw$Trip_Count - test_hw$pred6), na.rm = TRUE)
+
+cat("Model 6 (Improved) MAE:", round(mae6, 3), "\n")
+cat("Improvement from Model 5:", round((mae5 - mae6) / mae5 * 100, 2), "%\n")
+```
+
+## Feature Impact Analysis
+
+```{r feature_impact}
+weather_impact <- test_hw %>%
+  group_by(perfect_weather) %>%
+  summarize(
+    Avg_Actual = mean(Trip_Count, na.rm = TRUE),
+    Avg_Predicted = mean(pred6, na.rm = TRUE),
+    MAE = mean(abs(Trip_Count - pred6), na.rm = TRUE),
+    n = n()
+  ) %>%
+  mutate(Weather = ifelse(perfect_weather == 1, "Perfect Weather", "Other Weather"))
+
+ggplot(weather_impact, aes(x = Weather)) +
+  geom_col(aes(y = Avg_Actual, fill = "Actual"), 
+           alpha = 0.7, position = position_dodge(width = 0.8), width = 0.4) +
+  geom_col(aes(y = Avg_Predicted, fill = "Predicted"), 
+           alpha = 0.7, position = position_dodge(width = 0.8), width = 0.4) +
+  scale_fill_manual(values = c("Actual" = "#08519c", "Predicted" = "#6baed6")) +
+  labs(
+    title = "Impact of Perfect Weather on Ridership",
+    subtitle = "Average trips per hour",
+    x = "Weather Condition",
+    y = "Average Trips",
+    fill = ""
+  ) +
+  plotTheme
+```
+
+## Count Models
+
+### Poisson Regression
+
+```{r count_models}
+model_poisson <- glm(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    perfect_weather + is_holiday,
+  family = poisson(link = "log"),
+  data = train_hw
+)
+
+model_nb <- glm.nb(
+  Trip_Count ~ hour + weekend + 
+    Temperature + Precipitation +
+    lag1Hour + lag3Hours + lag1day +
+    perfect_weather + is_holiday,
+  data = train_hw
+)
+
+test_hw <- test_hw %>%
+  mutate(
+    pred_poisson = predict(model_poisson, newdata = test_hw, type = "response"),
+    pred_nb = predict(model_nb, newdata = test_hw, type = "response")
+  )
+
+mae_poisson <- mean(abs(test_hw$Trip_Count - test_hw$pred_poisson), na.rm = TRUE)
+mae_nb <- mean(abs(test_hw$Trip_Count - test_hw$pred_nb), na.rm = TRUE)
+
+cat("Poisson MAE:", round(mae_poisson, 3), "\n")
+cat("Negative Binomial MAE:", round(mae_nb, 3), "\n")
+```
+
+## Final Model Comparison
+
+```{r final_comparison}
+final_comparison <- tibble(
+  Model = c(
+    "1. Time + Weather", 
+    "2. + Temporal Lags", 
+    "3. + Demographics", 
+    "4. + Station FE",
+    "5. + Rush Hour Int", 
+    "6. + New Features",
+    "7. Poisson", 
+    "8. Negative Binomial"
+  ),
+  MAE = c(mae1, mae2, mae3, mae4, mae5, mae6, mae_poisson, mae_nb)
+) %>%
+  mutate(
+    Improvement = round((first(MAE) - MAE) / first(MAE) * 100, 1),
+    Rank = rank(MAE)
+  ) %>%
+  arrange(Rank)
+
+kable(final_comparison, digits = 3,
+      caption = "Table 4: Final Model Comparison - All 8 Models") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) %>%
+  row_spec(which.min(final_comparison$MAE), 
+           bold = TRUE, background = "#3182bd", color = "white")
+
+ggplot(final_comparison, aes(x = reorder(Model, MAE), y = MAE, fill = as.factor(Rank))) +
+  geom_col(alpha = 0.8) +
+  geom_text(aes(label = round(MAE, 3)), hjust = -0.1, size = 3.5) +
+  coord_flip() +
+  scale_fill_viridis_d(option = "plasma", direction = -1) +
+  labs(
+    title = "Final Model Comparison - All 8 Models",
+    subtitle = "Q3 2024 Test Set Performance",
+    x = "",
+    y = "Mean Absolute Error (trips per hour)"
+  ) +
+  plotTheme +
+  theme(legend.position = "none")
+```
+
+---
+
+# Part 4: Critical Reflection
+
+## 1. Operational Implications
+
+Our best model (Model `r which.min(final_comparison$MAE)`: `r final_comparison$Model[which.min(final_comparison$MAE)]`) achieves an MAE of `r round(min(final_comparison$MAE), 3)` trips per hour on Q3 2024 test data, representing a `r round((mae1 - min(final_comparison$MAE)) / mae1 * 100, 1)`% improvement over the baseline.
+
+Looking at temporal patterns, I notice that errors are highest during `r time_errors_hw$time_of_day[which.max(time_errors_hw$MAE)]` (MAE = `r round(max(time_errors_hw$MAE), 2)`) compared to `r time_errors_hw$time_of_day[which.min(time_errors_hw$MAE)]` (MAE = `r round(min(time_errors_hw$MAE), 2)`). This makes sense because rush hour demand is less predictable - people leave work at different times, and weather affects their decisions differently than during stable mid-day periods.
+
+**My recommendation:** Deploy a hybrid system that uses this model for high-volume stations during stable periods, but relies on historical averages plus real-time adjustments for low-volume stations and volatile time periods. Always include human oversight for unusual events like concerts, sports games, or severe weather that the model cannot capture. The model should inform but not fully automate rebalancing decisions.
+
+## 2. Equity Considerations
+
+Our demographic analysis reveals concerning patterns. Looking at income-based errors, `r income_errors_hw$income_group[which.max(income_errors_hw$MAE)]` neighborhoods have MAE = `r round(max(income_errors_hw$MAE), 2)` while `r income_errors_hw$income_group[which.min(income_errors_hw$MAE)]` neighborhoods have MAE = `r round(min(income_errors_hw$MAE), 2)`.
+
+Additionally, I found that `r race_errors_hw$majority_group[which.max(race_errors_hw$MAE)]` neighborhoods have higher prediction errors (MAE = `r round(max(race_errors_hw$MAE), 2)`) compared to `r race_errors_hw$majority_group[which.min(race_errors_hw$MAE)]` neighborhoods (MAE = `r round(min(race_errors_hw$MAE), 2)`).
+
+This pattern means we're better at predicting demand in wealthier, whiter areas where bikes are already more available. Less accurate predictions in underserved neighborhoods could lead to fewer bikes being allocated when residents need them, perpetuating existing transportation inequities.
+
+**Recommended safeguards:**
+
+1. Set minimum service levels for all neighborhoods regardless of predicted demand
+2. Track prediction accuracy by neighborhood demographics monthly
+3. Invest in understanding unmet demand through surveys and community engagement
+4. Consider equity adjustments to rebalancing algorithms that prioritize underserved areas
+5. Monitor whether prediction errors translate to actual service disparities
+
+## 3. Model Limitations
+
+**What our model misses:**
+
+1. **Special events:** When I looked at high-error observations, several coincided with major events (concerts, sports games, festivals). Our weather and time features cannot predict these demand spikes without event data.
+
+2. **Weather perception vs. reality:** People decide whether to bike based on weather *forecasts* and *feels-like* temperature, not the actual conditions we measure. A 65°F day feels different in July versus September.
+
+3. **Unmet demand:** We only see completed trips. If a station runs out of bikes, we interpret this as "low demand" when it's actually "unmet demand." This creates a systematic bias in our training data that makes us predict lower demand than actually exists at popular stations.
+
+4. **Network effects:** Our model treats each station independently, but in reality, demand at one station affects demand at nearby stations through the flow of bikes. A station running out of bikes pushes demand to neighbors.
+
+**With more time, I would:**
+
+1. Incorporate real-time station status (bikes available) as a feature
+2. Build separate models for different station types (residential, commercial, tourist)
+3. Add event data from city calendars and social media
+4. Test model robustness on data from different seasons and years
+5. Develop methods to estimate unmet demand from station outages
+6. Explore spatial models that account for network effects between stations
+
+---
+
+## Conclusion
+
+Machine learning can meaningfully improve bike-share demand prediction, but technical performance alone isn't enough. A model that works better in wealthy neighborhoods isn't truly "better" - it's optimizing for the wrong metric and could worsen existing inequities.
+
+The real challenge is building a system that provides equitable, reliable service while remaining financially sustainable. This requires technical sophistication (like our improved models), operational flexibility (human oversight and adjustments), and ethical constraints that prioritize fairness over pure predictive accuracy.
+
+**Final recommendation:** Deploy cautiously with strong equity safeguards, monitor continuously across demographic groups, and remain humble about prediction limitations. The goal should be to support - not replace - human decision-making in bike rebalancing operations.
+
+---
+
+*Analysis completed: `r Sys.Date()`*
+
+*Total models tested: 8*
+
+*Best model: `r final_comparison$Model[which.min(final_comparison$MAE)]`*
+
+*Best MAE: `r round(min(final_comparison$MAE), 3)` trips per hour*
