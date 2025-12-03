@@ -17,7 +17,7 @@ execute:
 
 # Setup
 
-```{r setup, message=FALSE, echo=FALSE}
+```{r setup}
 #| message: false
 library(tidyverse)
 library(lubridate)
@@ -30,7 +30,7 @@ library(knitr)
 library(kableExtra)
 library(MASS)
 library(zoo)
-
+library(glue)
 options(scipen = 999)
 
 # Plot themes
@@ -52,9 +52,7 @@ mapTheme <- theme(
   legend.position = "right"
 )
 
-# Census API key - CHANGE THIS TO YOUR KEY
-census_api_key("52672d930a0de492f5df5d49a36554782fa8f1ef", 
-               overwrite = TRUE, install = TRUE)
+
 ```
 
 ---
@@ -77,10 +75,9 @@ I chose Q3 2024 (July-September) because:
 # Read Q3 2024 data
 indego_hw <- read_csv("data/indego-trips-2024-q3.csv")
 
-cat("Total trips in Q3 2024:", format(nrow(indego_hw), big.mark = ","), "\n")
-cat("Date range:", 
-    min(mdy_hm(indego_hw$start_time)), "to", 
-    max(mdy_hm(indego_hw$start_time)), "\n")
+glue("Total trips in Q3 2024: {format(nrow(indego_hw), big.mark = ',')}")
+
+glue("Date range: {min(mdy_hm(indego_hw$start_time))} to {max(mdy_hm(indego_hw$start_time))}")
 ```
 
 ## Create Time Features
@@ -100,7 +97,7 @@ indego_hw <- indego_hw %>%
     rush_hour = ifelse(hour %in% c(7, 8, 9, 16, 17, 18), 1, 0)
   )
 
-cat("Time features created successfully!\n")
+glue("Time features created successfully!")
 ```
 
 ## Get Weather Data
@@ -129,9 +126,13 @@ weather_complete_hw <- weather_processed_hw %>%
   complete(interval60 = seq(min(interval60), max(interval60), by = "hour")) %>%
   fill(Temperature, Precipitation, Wind_Speed, .direction = "down")
 
-cat("Weather data downloaded successfully!\n")
-cat("Temperature range:", round(min(weather_complete_hw$Temperature, na.rm = TRUE), 1), 
-    "to", round(max(weather_complete_hw$Temperature, na.rm = TRUE), 1), "°F\n")
+glue("Weather data downloaded successfully!")
+
+glue(
+  "Temperature range: {round(min(weather_complete_hw$Temperature, na.rm = TRUE), 1)} ",
+  "to {round(max(weather_complete_hw$Temperature, na.rm = TRUE), 1)} °F"
+)
+
 ```
 
 ## Get Census Data
@@ -167,7 +168,8 @@ philly_census_hw <- get_acs(
   st_transform(crs = 4326) %>%
   st_buffer(0)  # FIX: Repair invalid geometries
 
-cat("Census data downloaded successfully!\n")
+glue("Census data downloaded successfully!")
+
 ```
 
 ## Join Census to Stations
@@ -199,8 +201,10 @@ indego_census_hw <- indego_hw %>%
   by = "start_station"
 )
 
-cat("Stations with census data:", length(valid_stations_hw), "\n")
-cat("Trips successfully joined:", format(nrow(indego_census_hw), big.mark = ","), "\n")
+glue("Stations with census data: {length(valid_stations_hw)}")
+
+glue("Trips successfully joined: {format(nrow(indego_census_hw), big.mark = ',')}")
+
 ```
 
 ## Create Station-Hour Panel
@@ -226,7 +230,8 @@ ride_hw <- indego_census_hw %>%
 ride_hw <- ride_hw %>%
   left_join(weather_complete_hw, by = "interval60")
 
-cat("Panel observations:", format(nrow(ride_hw), big.mark = ","), "\n")
+glue("Panel observations: {format(nrow(ride_hw), big.mark = ',')}")
+
 ```
 
 ## Create Temporal Lags
@@ -242,7 +247,8 @@ ride_hw <- ride_hw %>%
   ) %>%
   ungroup()
 
-cat("Temporal lags created!\n")
+glue("Temporal lags created!")
+
 ```
 
 ## Train/Test Split
@@ -263,10 +269,11 @@ train_hw <- ride_hw_clean %>%
 test_hw <- ride_hw_clean %>%
   filter(!date %in% train_dates_hw)
 
-cat("Training obs:", format(nrow(train_hw), big.mark = ","), "\n")
-cat("Testing obs:", format(nrow(test_hw), big.mark = ","), "\n")
-cat("Training dates:", length(unique(train_hw$date)), "\n")
-cat("Testing dates:", length(unique(test_hw$date)), "\n")
+glue("Training obs: {format(nrow(train_hw), big.mark = ',')}")
+glue("Testing obs: {format(nrow(test_hw), big.mark = ',')}")
+glue("Training dates: {length(unique(train_hw$date))}")
+glue("Testing dates: {length(unique(test_hw$date))}")
+
 ```
 
 ---
@@ -285,7 +292,7 @@ test_hw <- test_hw %>%
   mutate(pred1 = predict(model1_hw, newdata = test_hw))
 
 mae1 <- mean(abs(test_hw$Trip_Count - test_hw$pred1), na.rm = TRUE)
-cat("Model 1 MAE:", round(mae1, 3), "\n")
+glue("Model 1 MAE: {round(mae1, 3)}")
 ```
 
 ## Model 2: + Temporal Lags
@@ -301,8 +308,9 @@ test_hw <- test_hw %>%
   mutate(pred2 = predict(model2_hw, newdata = test_hw))
 
 mae2 <- mean(abs(test_hw$Trip_Count - test_hw$pred2), na.rm = TRUE)
-cat("Model 2 MAE:", round(mae2, 3), "\n")
-cat("Improvement:", round((mae1 - mae2) / mae1 * 100, 1), "%\n")
+glue("Model 2 MAE: {round(mae2, 3)}")
+
+glue("Improvement: {round((mae1 - mae2) / mae1 * 100, 1)}%")
 ```
 
 ## Model 3: + Demographics
@@ -320,8 +328,9 @@ test_hw <- test_hw %>%
   mutate(pred3 = predict(model3_hw, newdata = test_hw))
 
 mae3 <- mean(abs(test_hw$Trip_Count - test_hw$pred3), na.rm = TRUE)
-cat("Model 3 MAE:", round(mae3, 3), "\n")
-cat("Improvement:", round((mae1 - mae3) / mae1 * 100, 1), "%\n")
+glue("Model 3 MAE: {round(mae3, 3)}")
+
+glue("Improvement: {round((mae1 - mae3) / mae1 * 100, 1)}%")
 ```
 
 ## Model 4: + Station Fixed Effects
@@ -342,8 +351,9 @@ test_hw <- test_hw %>%
   mutate(pred4 = predict(model4_hw, newdata = test_hw))
 
 mae4 <- mean(abs(test_hw$Trip_Count - test_hw$pred4), na.rm = TRUE)
-cat("Model 4 MAE:", round(mae4, 3), "\n")
-cat("Improvement:", round((mae1 - mae4) / mae1 * 100, 1), "%\n")
+glue("Model 4 MAE: {round(mae4, 3)}")
+
+glue("Improvement: {round((mae1 - mae4) / mae1 * 100, 1)}%")
 ```
 
 ## Model 5: + Rush Hour Interaction
@@ -363,8 +373,9 @@ test_hw <- test_hw %>%
   mutate(pred5 = predict(model5_hw, newdata = test_hw))
 
 mae5 <- mean(abs(test_hw$Trip_Count - test_hw$pred5), na.rm = TRUE)
-cat("Model 5 MAE:", round(mae5, 3), "\n")
-cat("Improvement from baseline:", round((mae1 - mae5) / mae1 * 100, 1), "%\n")
+glue("Model 5 MAE: {round(mae5, 3)}")
+
+glue("Improvement from baseline: {round((mae1 - mae5) / mae1 * 100, 1)}%")
 ```
 
 ## Model Comparison
@@ -673,10 +684,10 @@ train_hw <- train_hw %>%
 test_hw <- test_hw %>%
   mutate(weekend_nice = weekend * perfect_weather)
 
-cat("New features created:\n")
-cat("- Perfect weather (60-75°F, no rain)\n")
-cat("- Holiday indicator\n")
-cat("- Weekend + nice weather interaction\n")
+glue("New features created:")
+glue("- Perfect weather (60–75°F, no rain)")
+glue("- Holiday indicator")
+glue("- Weekend + nice weather interaction")
 ```
 
 ## Model 6: With New Features
@@ -698,8 +709,9 @@ test_hw <- test_hw %>%
 
 mae6 <- mean(abs(test_hw$Trip_Count - test_hw$pred6), na.rm = TRUE)
 
-cat("Model 6 (Improved) MAE:", round(mae6, 3), "\n")
-cat("Improvement from Model 5:", round((mae5 - mae6) / mae5 * 100, 2), "%\n")
+glue("Model 6 (Improved) MAE: {round(mae6, 3)}")
+
+glue("Improvement from Model 5: {round((mae5 - mae6) / mae5 * 100, 2)}%")
 ```
 
 ## Feature Impact Analysis
@@ -762,8 +774,8 @@ test_hw <- test_hw %>%
 mae_poisson <- mean(abs(test_hw$Trip_Count - test_hw$pred_poisson), na.rm = TRUE)
 mae_nb <- mean(abs(test_hw$Trip_Count - test_hw$pred_nb), na.rm = TRUE)
 
-cat("Poisson MAE:", round(mae_poisson, 3), "\n")
-cat("Negative Binomial MAE:", round(mae_nb, 3), "\n")
+glue("Poisson MAE: {round(mae_poisson, 3)}")
+glue("Negative Binomial MAE: {round(mae_nb, 3)}")
 ```
 
 ## Final Model Comparison

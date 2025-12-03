@@ -2542,9 +2542,41 @@ border: 0;
 <section id="setup" class="level1">
 <h1>Setup</h1>
 <div class="cell">
-<div class="cell-output cell-output-stdout">
-<pre><code>[1] &quot;52672d930a0de492f5df5d49a36554782fa8f1ef&quot;</code></pre>
-</div>
+<details open class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(lubridate)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(sf)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tigris)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidycensus)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(riem)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(viridis)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(knitr)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(kableExtra)</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(MASS)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(zoo)</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(glue)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">scipen =</span> <span class="dv">999</span>)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot themes</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>plotTheme <span class="ot">&lt;-</span> <span class="fu">theme</span>(</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">14</span>, <span class="at">face =</span> <span class="st">&quot;bold&quot;</span>),</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">plot.subtitle =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">10</span>),</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">10</span>, <span class="at">face =</span> <span class="st">&quot;bold&quot;</span>),</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">9</span>),</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>  <span class="at">legend.position =</span> <span class="st">&quot;right&quot;</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>mapTheme <span class="ot">&lt;-</span> <span class="fu">theme</span>(</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  <span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">14</span>, <span class="at">face =</span> <span class="st">&quot;bold&quot;</span>),</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.line =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.text =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.ticks =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>  <span class="at">axis.title =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>  <span class="at">panel.background =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">legend.position =</span> <span class="st">&quot;right&quot;</span></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
 </div>
 <hr>
 </section>
@@ -2561,19 +2593,17 @@ border: 0;
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Read Q3 2024 data</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>indego_hw <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="st">&quot;data/indego-trips-2024-q3.csv&quot;</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Total trips in Q3 2024:&quot;</span>, <span class="fu">format</span>(<span class="fu">nrow</span>(indego_hw), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Total trips in Q3 2024: {format(nrow(indego_hw), big.mark = &#39;,&#39;)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Total trips in Q3 2024: 408,408 </code></pre>
+<pre><code>Total trips in Q3 2024: 408,408</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Date range:&quot;</span>, </span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">min</span>(<span class="fu">mdy_hm</span>(indego_hw<span class="sc">$</span>start_time)), <span class="st">&quot;to&quot;</span>, </span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">max</span>(<span class="fu">mdy_hm</span>(indego_hw<span class="sc">$</span>start_time)), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Date range: {min(mdy_hm(indego_hw$start_time))} to {max(mdy_hm(indego_hw$start_time))}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Date range: 1719792120 to 1727740740 </code></pre>
+<pre><code>Date range: 2024-07-01 00:02:00 to 2024-09-30 23:59:00</code></pre>
 </div>
 </div>
 </section>
@@ -2596,7 +2626,7 @@ border: 0;
 <span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">rush_hour =</span> <span class="fu">ifelse</span>(hour <span class="sc">%in%</span> <span class="fu">c</span>(<span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">16</span>, <span class="dv">17</span>, <span class="dv">18</span>), <span class="dv">1</span>, <span class="dv">0</span>)</span>
 <span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  )</span>
 <span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Time features created successfully!</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Time features created successfully!&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>Time features created successfully!</code></pre>
@@ -2631,15 +2661,17 @@ border: 0;
 <span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">complete</span>(<span class="at">interval60 =</span> <span class="fu">seq</span>(<span class="fu">min</span>(interval60), <span class="fu">max</span>(interval60), <span class="at">by =</span> <span class="st">&quot;hour&quot;</span>)) <span class="sc">%&gt;%</span></span>
 <span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">fill</span>(Temperature, Precipitation, Wind_Speed, <span class="at">.direction =</span> <span class="st">&quot;down&quot;</span>)</span>
 <span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Weather data downloaded successfully!</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Weather data downloaded successfully!&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>Weather data downloaded successfully!</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Temperature range:&quot;</span>, <span class="fu">round</span>(<span class="fu">min</span>(weather_complete_hw<span class="sc">$</span>Temperature, <span class="at">na.rm =</span> <span class="cn">TRUE</span>), <span class="dv">1</span>), </span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;to&quot;</span>, <span class="fu">round</span>(<span class="fu">max</span>(weather_complete_hw<span class="sc">$</span>Temperature, <span class="at">na.rm =</span> <span class="cn">TRUE</span>), <span class="dv">1</span>), <span class="st">&quot;°F</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;Temperature range: {round(min(weather_complete_hw$Temperature, na.rm = TRUE), 1)} &quot;</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;to {round(max(weather_complete_hw$Temperature, na.rm = TRUE), 1)} °F&quot;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>Temperature range: 55 to 98 °F</code></pre>
@@ -2681,7 +2713,7 @@ border: 0;
 <span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_transform</span>(<span class="at">crs =</span> <span class="dv">4326</span>) <span class="sc">%&gt;%</span></span>
 <span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">st_buffer</span>(<span class="dv">0</span>)  <span class="co"># FIX: Repair invalid geometries</span></span>
 <span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Census data downloaded successfully!</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Census data downloaded successfully!&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 </section>
@@ -2716,17 +2748,17 @@ border: 0;
 <span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">by =</span> <span class="st">&quot;start_station&quot;</span></span>
 <span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>)</span>
 <span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Stations with census data:&quot;</span>, <span class="fu">length</span>(valid_stations_hw), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Stations with census data: {length(valid_stations_hw)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Stations with census data: 250 </code></pre>
+<pre><code>Stations with census data: 250</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Trips successfully joined:&quot;</span>, <span class="fu">format</span>(<span class="fu">nrow</span>(indego_census_hw), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Trips successfully joined: {format(nrow(indego_census_hw), big.mark = &#39;,&#39;)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Trips successfully joined: 404,282 </code></pre>
+<pre><code>Trips successfully joined: 404,282</code></pre>
 </div>
 </div>
 </section>
@@ -2755,10 +2787,10 @@ border: 0;
 <span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a>ride_hw <span class="ot">&lt;-</span> ride_hw <span class="sc">%&gt;%</span></span>
 <span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(weather_complete_hw, <span class="at">by =</span> <span class="st">&quot;interval60&quot;</span>)</span>
 <span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Panel observations:&quot;</span>, <span class="fu">format</span>(<span class="fu">nrow</span>(ride_hw), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Panel observations: {format(nrow(ride_hw), big.mark = &#39;,&#39;)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Panel observations: 245,733 </code></pre>
+<pre><code>Panel observations: 245,733</code></pre>
 </div>
 </div>
 </section>
@@ -2777,7 +2809,7 @@ border: 0;
 <span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
 <span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>()</span>
 <span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Temporal lags created!</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Temporal lags created!&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>Temporal lags created!</code></pre>
@@ -2804,31 +2836,31 @@ border: 0;
 <span id="cb21-13"><a href="#cb21-13" aria-hidden="true" tabindex="-1"></a>test_hw <span class="ot">&lt;-</span> ride_hw_clean <span class="sc">%&gt;%</span></span>
 <span id="cb21-14"><a href="#cb21-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span>date <span class="sc">%in%</span> train_dates_hw)</span>
 <span id="cb21-15"><a href="#cb21-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Training obs:&quot;</span>, <span class="fu">format</span>(<span class="fu">nrow</span>(train_hw), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb21-16"><a href="#cb21-16" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Training obs: {format(nrow(train_hw), big.mark = &#39;,&#39;)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Training obs: 165,571 </code></pre>
+<pre><code>Training obs: 165,571</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Testing obs:&quot;</span>, <span class="fu">format</span>(<span class="fu">nrow</span>(test_hw), <span class="at">big.mark =</span> <span class="st">&quot;,&quot;</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Testing obs: {format(nrow(test_hw), big.mark = &#39;,&#39;)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Testing obs: 74,354 </code></pre>
+<pre><code>Testing obs: 74,354</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Training dates:&quot;</span>, <span class="fu">length</span>(<span class="fu">unique</span>(train_hw<span class="sc">$</span>date)), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Training dates: {length(unique(train_hw$date))}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Training dates: 64 </code></pre>
+<pre><code>Training dates: 64</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Testing dates:&quot;</span>, <span class="fu">length</span>(<span class="fu">unique</span>(test_hw<span class="sc">$</span>date)), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Testing dates: {length(unique(test_hw$date))}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Testing dates: 28 </code></pre>
+<pre><code>Testing dates: 28</code></pre>
 </div>
 </div>
 <hr>
@@ -2850,10 +2882,10 @@ border: 0;
 <span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pred1 =</span> <span class="fu">predict</span>(model1_hw, <span class="at">newdata =</span> test_hw))</span>
 <span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>mae1 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred1), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 1 MAE:&quot;</span>, <span class="fu">round</span>(mae1, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 1 MAE: {round(mae1, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 1 MAE: 1.032 </code></pre>
+<pre><code>Model 1 MAE: 1.032</code></pre>
 </div>
 </div>
 </section>
@@ -2872,17 +2904,17 @@ border: 0;
 <span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pred2 =</span> <span class="fu">predict</span>(model2_hw, <span class="at">newdata =</span> test_hw))</span>
 <span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb31-10"><a href="#cb31-10" aria-hidden="true" tabindex="-1"></a>mae2 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred2), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 2 MAE:&quot;</span>, <span class="fu">round</span>(mae2, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb31-11"><a href="#cb31-11" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 2 MAE: {round(mae2, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 2 MAE: 0.918 </code></pre>
+<pre><code>Model 2 MAE: 0.918</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Improvement:&quot;</span>, <span class="fu">round</span>((mae1 <span class="sc">-</span> mae2) <span class="sc">/</span> mae1 <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Improvement: {round((mae1 - mae2) / mae1 * 100, 1)}%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Improvement: 11 %</code></pre>
+<pre><code>Improvement: 11%</code></pre>
 </div>
 </div>
 </section>
@@ -2903,17 +2935,17 @@ border: 0;
 <span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pred3 =</span> <span class="fu">predict</span>(model3_hw, <span class="at">newdata =</span> test_hw))</span>
 <span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb35-12"><a href="#cb35-12" aria-hidden="true" tabindex="-1"></a>mae3 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred3), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 3 MAE:&quot;</span>, <span class="fu">round</span>(mae3, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb35-13"><a href="#cb35-13" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 3 MAE: {round(mae3, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 3 MAE: 0.916 </code></pre>
+<pre><code>Model 3 MAE: 0.916</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Improvement:&quot;</span>, <span class="fu">round</span>((mae1 <span class="sc">-</span> mae3) <span class="sc">/</span> mae1 <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Improvement: {round((mae1 - mae3) / mae1 * 100, 1)}%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Improvement: 11.3 %</code></pre>
+<pre><code>Improvement: 11.3%</code></pre>
 </div>
 </div>
 </section>
@@ -2942,17 +2974,17 @@ border: 0;
 <span id="cb41-11"><a href="#cb41-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pred4 =</span> <span class="fu">predict</span>(model4_hw, <span class="at">newdata =</span> test_hw))</span>
 <span id="cb41-12"><a href="#cb41-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb41-13"><a href="#cb41-13" aria-hidden="true" tabindex="-1"></a>mae4 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred4), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb41-14"><a href="#cb41-14" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 4 MAE:&quot;</span>, <span class="fu">round</span>(mae4, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb41-14"><a href="#cb41-14" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 4 MAE: {round(mae4, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 4 MAE: 0.895 </code></pre>
+<pre><code>Model 4 MAE: 0.895</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Improvement:&quot;</span>, <span class="fu">round</span>((mae1 <span class="sc">-</span> mae4) <span class="sc">/</span> mae1 <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Improvement: {round((mae1 - mae4) / mae1 * 100, 1)}%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Improvement: 13.3 %</code></pre>
+<pre><code>Improvement: 13.3%</code></pre>
 </div>
 </div>
 </section>
@@ -2975,17 +3007,17 @@ border: 0;
 <span id="cb45-12"><a href="#cb45-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">pred5 =</span> <span class="fu">predict</span>(model5_hw, <span class="at">newdata =</span> test_hw))</span>
 <span id="cb45-13"><a href="#cb45-13" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb45-14"><a href="#cb45-14" aria-hidden="true" tabindex="-1"></a>mae5 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred5), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb45-15"><a href="#cb45-15" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 5 MAE:&quot;</span>, <span class="fu">round</span>(mae5, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb45-15"><a href="#cb45-15" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 5 MAE: {round(mae5, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 5 MAE: 0.887 </code></pre>
+<pre><code>Model 5 MAE: 0.887</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb47"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Improvement from baseline:&quot;</span>, <span class="fu">round</span>((mae1 <span class="sc">-</span> mae5) <span class="sc">/</span> mae1 <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb47"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb47-1"><a href="#cb47-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Improvement from baseline: {round((mae1 - mae5) / mae1 * 100, 1)}%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Improvement from baseline: 14 %</code></pre>
+<pre><code>Improvement from baseline: 14%</code></pre>
 </div>
 </div>
 </section>
@@ -3604,28 +3636,28 @@ border: 0;
 <span id="cb61-25"><a href="#cb61-25" aria-hidden="true" tabindex="-1"></a>test_hw <span class="ot">&lt;-</span> test_hw <span class="sc">%&gt;%</span></span>
 <span id="cb61-26"><a href="#cb61-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">weekend_nice =</span> weekend <span class="sc">*</span> perfect_weather)</span>
 <span id="cb61-27"><a href="#cb61-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb61-28"><a href="#cb61-28" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;New features created:</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb61-28"><a href="#cb61-28" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;New features created:&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>New features created:</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;- Perfect weather (60-75°F, no rain)</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;- Perfect weather (60–75°F, no rain)&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>- Perfect weather (60-75°F, no rain)</code></pre>
+<pre><code>- Perfect weather (60–75°F, no rain)</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;- Holiday indicator</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;- Holiday indicator&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>- Holiday indicator</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb67"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;- Weekend + nice weather interaction</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb67"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;- Weekend + nice weather interaction&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>- Weekend + nice weather interaction</code></pre>
@@ -3653,17 +3685,17 @@ border: 0;
 <span id="cb69-14"><a href="#cb69-14" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb69-15"><a href="#cb69-15" aria-hidden="true" tabindex="-1"></a>mae6 <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred6), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb69-16"><a href="#cb69-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb69-17"><a href="#cb69-17" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model 6 (Improved) MAE:&quot;</span>, <span class="fu">round</span>(mae6, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb69-17"><a href="#cb69-17" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Model 6 (Improved) MAE: {round(mae6, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Model 6 (Improved) MAE: 0.887 </code></pre>
+<pre><code>Model 6 (Improved) MAE: 0.887</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb71"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Improvement from Model 5:&quot;</span>, <span class="fu">round</span>((mae5 <span class="sc">-</span> mae6) <span class="sc">/</span> mae5 <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">2</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb71"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Improvement from Model 5: {round((mae5 - mae6) / mae5 * 100, 2)}%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Improvement from Model 5: 0 %</code></pre>
+<pre><code>Improvement from Model 5: 0%</code></pre>
 </div>
 </div>
 </section>
@@ -3739,17 +3771,17 @@ border: 0;
 <span id="cb74-24"><a href="#cb74-24" aria-hidden="true" tabindex="-1"></a>mae_poisson <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred_poisson), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb74-25"><a href="#cb74-25" aria-hidden="true" tabindex="-1"></a>mae_nb <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">abs</span>(test_hw<span class="sc">$</span>Trip_Count <span class="sc">-</span> test_hw<span class="sc">$</span>pred_nb), <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb74-26"><a href="#cb74-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb74-27"><a href="#cb74-27" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Poisson MAE:&quot;</span>, <span class="fu">round</span>(mae_poisson, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb74-27"><a href="#cb74-27" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Poisson MAE: {round(mae_poisson, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Poisson MAE: 0.94 </code></pre>
+<pre><code>Poisson MAE: 0.94</code></pre>
 </div>
 <details open class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb76"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Negative Binomial MAE:&quot;</span>, <span class="fu">round</span>(mae_nb, <span class="dv">3</span>), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb76"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="fu">glue</span>(<span class="st">&quot;Negative Binomial MAE: {round(mae_nb, 3)}&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Negative Binomial MAE: 0.94 </code></pre>
+<pre><code>Negative Binomial MAE: 0.94</code></pre>
 </div>
 </div>
 </section>
