@@ -9,6 +9,8 @@ project:
     - assignments/assignment_3/Yang_Chen_Fang_Gao_Xiang_Zhao_Presentation.qmd
     - assignments/assignment_4/Assignment4_Spatial_Predictive_Analysis.qmd
     - assignments/assignment_5/assignment5.rmd
+    - assignments/final_project_analysis_process/eviction_data_analysis.rmd
+    - assignments/final_project_presentation/eviction_presentation.qmd
 
 website:
   title: "Your Name - Zicheng Xiang MUSA 5080 Portfolio"
@@ -50,6 +52,10 @@ website:
             text: "Assignment 4: Spatial Predictive Analysis"  
           - href: assignments/assignment_5/assignment5.rmd
             text: "Assignment 5: Space-Time Prediction of Bike Share Demand: Philadelphia Indego" 
+          - href: assignments/final_project_analysis_process/eviction_data_analysis.rmd
+            text: "Final Project Analysis" 
+          - href: assignments/final_project_presentation/eviction_presentation.qmd
+            text: "Final Project Presentation" 
 
 format:
   html:

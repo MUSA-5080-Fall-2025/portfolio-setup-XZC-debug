@@ -1,0 +1,159 @@
+---
+title: "Predicting Eviction Crises in Philadelphia"
+subtitle: "Early Warning System Using Macroeconomic Data"
+author: "Josh, Zhe Fang, Zicheng Xiang, Yanyang Chen"
+date: "December 8, 2025"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    footer: "MUSA 5080 Final Project"
+---
+# 1. The Policy Problem {.smaller}
+
+:::: {.columns}
+
+::: {.column width="60%"}
+**What we are predicting:**
+We are NOT predicting who or what. We are predicting **WHEN**.
+
+- **Goal:** Determine if eviction rates respond to economic disruptions.
+- **Dependent Variable:** `percentage_diff` (Deviation from historical baseline).
+- **Context:** Communities vulnerable to immediate budget stress are most affected.
+:::
+
+::: {.column width="40%"}
+![](figure/1.png){width="100%" fig-align="center"}
+:::
+
+::::
+
+# 2. Why This Matters
+
+Prevention is cheaper than crisis response
+
+- Legal aid: $5-10k per case
+- Homelessness services: $50k+ per family
+- Lost tax revenue, community disruption
+
+**Key insight:** Early warning → Early intervention
+
+# 3. Our Solution
+
+A model that uses economic analytics to provide an **Early Warning System**.
+
+- Focuses on identifying periods of heightened risk.
+- Allows policymakers to prepare resources *before* the surge hits.
+
+# 4. Data Integration
+
+Predictors sourced from three datasets:
+
+1.  **Eviction Lab:** `l1_percentage_diff` (Lagged eviction pressure)
+2.  **BLS (Macroeconomic):**
+    - `unemployment_rate` (Economic shock)
+    - `cpi` (Inflation/Cost of living)
+3.  **Urban Institute:** Household financial vulnerability indicators (e.g., debt, housing burden)
+
+# 5. Model Specification {.smaller}
+
+**Ordinary Least Squares (OLS)** selected because outcome is continuous and symmetric.
+
+**Dependent Variable:** `percentage_diff`
+- Measures how monthly eviction filings deviate from a historical baseline.
+- Focus is on modeling *unexpected* increases/decreases.
+
+**Predictors:**
+- **Lagged eviction pressure:** `l1_percentage_diff` (Accounts for persistence).
+- **Macroeconomic conditions:** `unemployment_rate`, `cpi`.
+- **Household financial vulnerability:** Variables distinguishing short-term disruption from structural conditions.
+
+# 6. Results {.smaller}
+
+**Model Performance:**
+- **R²: 0.7975** (Explains ~80% of variation)
+
+**Key Findings on Coefficients:**
+1.  **Lagged Eviction Pressure:** Positive and highly significant.
+    - *Meaning:* Strong persistence; once pressure rises, it tends to continue.
+2.  **Unemployment:** Statistically significant negative coefficient.
+    - *Meaning:* Consistent with income shock theory regarding deviations from baseline.
+3.  **CPI:** Positive but not statistically significant.
+    - *Meaning:* Short-run inflation effects are less immediate than labor market shocks.
+
+**Note on Urban Institute Data:**
+- Variables were dropped from coefficients due to perfect collinearity (they act as baseline constants), but serve as structural context.
+
+# 7. Validation Strategy {.smaller}
+
+**Comparison of Prediction Errors:**
+
+:::: {.columns}
+
+::: {.column width="55%" style="font-size: 90%;"}
+**Metric Breakdown:**
+
+- **Left: In-Sample** (Jan 2020 - Dec 2022)
+  - **MAE:** 0.1225 | **RMSE:** 0.1711
+  - *Observation:* Model accurately captures historical month-to-month deviations.
+
+<br>
+
+- **Right: Out-of-Sample** (Jan 2023 - Present)
+  - **MAE:** 0.1532 | **RMSE:** 0.1833
+  - *Observation:* Performance remains stable when forecasting unseen economic conditions.
+:::
+
+::: {.column width="45%"}
+![](figure/2.png){width="100%" fig-align="center"}
+:::
+
+::::
+
+# 8. Prediction Capabilities
+
+**What the model PREDICTS:**
+✅ **Early Warnings:** Signals upcoming months of high stress.
+✅ **Periods of Change:** Identifies *when* intensity of resources should be deployed.
+
+**What the model does NOT predict:**
+❌ **Specific Points:** Does not predict specific houses or addresses.
+❌ **Locations:** Does not predict specific neighborhoods or blocks (Citywide temporal index).
+
+# 9. Critical Limitations
+
+**Temporal vs. Spatial:**
+- The model successfully predicts citywide temporal fluctuations (time).
+- It **does not** capture neighborhood-level variation (space) because the financial vulnerability data is static over the modeled time period.
+
+**Policy Shocks:**
+- Cannot predict exogenous policy decisions (e.g., new moratoriums) that are not economic in nature.
+
+# 10. Required Safeguards
+
+**Can't deploy without these:**
+
+1.  **Community Oversight Board** - Tenant orgs, legal aid, Council members (veto power).
+2.  **Annual Bias Audits** - Public reporting of model accuracy.
+3.  **Prevention-only use** - Never for enforcement.
+4.  **Transparency** - Public code, equations, predictions.
+
+# 11. Implementation Roadmap
+
+**Phase 1 (Months 1-3):** Form oversight board, run in shadow mode.
+
+**Phase 2 (Months 4-12):** Public launch, coordinate with legal aid + rental assistance.
+
+**Phase 3 (Year 2+):** Evaluate outcomes, refine.
+
+**Cost-benefit:** High ROI by targeting prevention resources efficiently.
+
+# 12. Recommendation
+
+**Deploy as a Monthly Index**
+
+- Use the predictions as a **Monthly Eviction Pressure Index**.
+- **Action:** Update data monthly to monitor changes from month-to-month.
+- **Resource Deployment:** Use the index to determine *when* intensity of resources (legal aid, funding) should be scaled up.
+
+**Condition:** Must be paired with the safeguards listed in Slide 10.

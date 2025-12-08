@@ -1,0 +1,555 @@
+---
+title: "Eviction Predictor"
+author: ""
+date: "2025-12-01"
+output: html_document
+---
+
+# Project Setup and Environment
+
+This code chunk loads all required R packages and sets a global chunk option for reproducibility. Tidyverse and dplyr are used for data cleaning, reshaping, and merging multiple datasets, which is key given the integration of eviction records, economic indicators, and demographic data. Spatial components are handled using sf and tigris to manipulate census geographies and enable tract-level analysis, while tidycensus facilitates the integration of standardized Census attributes where applicable. Visualization and diagnostic tasks rely on ggplot2, patchwork, and scales, allowing for consistent exploratory data analysis and error assessment. Finally, broom supports tidy model output for interpretation, and readxl is used to import Excel-formatted documents that could not be reliably converted to CSV. Together.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(tidyverse)
+library(tidycensus)
+library(knitr)
+library(tigris)
+library(sf)
+library(broom)
+library(readxl) # some data came in xlsx formata and did not convert to csv cleanly
+library(scales)
+library(patchwork)
+library(here)
+library(ggplot2)
+
+```
+
+# Data Overview and Data Imports
+
+This code chunk imports all primary datasets used in the analysis, bringing together eviction records, demographic context, economic indicators, and measures of household financial vulnerability. The core eviction data are sourced from evictionlab.org . Multiple eviction tables are loaded to support different analytical needs, including raw filing counts (tract_filings), normalized filing rates (tract_filing_rate), and citywide temporal patterns relative to historical baselines (eviction_trends). These complementary formats allow the project to examine evictions at both the spatial (tract-level) and temporal (month-to-month) scales, which is critical for understanding changes in eviction activity.
+
+To contextualize eviction behavior within broader economic and social conditions, the project incorporates several external data sources. Monthly unemployment rates and Consumer Price Index (CPI) data capture macroeconomic conditions that directly affect households’ ability to meet rent obligations. This data is sourced from the Bureau of Labor Statistics. The Urban Institute financial health dataset provides indicators of underlying financial vulnerability, such as debt burdens, housing cost stress, and labor market engagement. Additional datasets from the eviction lab describing neighborhood demographics, eviction hotspots, and deviations from historical filing baselines support exploratory analysis and feature engineering during later modeling stages. These datasets enable a transparent, multi-source approach to integrate diverse data sources in support of a policy-relevant predictive model.
+
+```{r import_data}
+# Changes in Claim Amount
+claim_change <- read.csv("eviction_data/changes_claims.csv")
+
+# Demographics
+demographics <- read.csv("eviction_data/demographics.csv")
+
+# Hotspots
+hotspots <- read.csv("eviction_data/eviction_hotspots.csv")
+
+# Evictions Relative to Baseline
+evictions_baseline <- read.csv("eviction_data/filings_relative_baseline.csv")
+
+# Tract Level Filings
+tract_filings <- read.csv("eviction_data/tract_level_filings.csv")
+
+# Tract Level Filing Rate
+tract_filing_rate <- read.csv("eviction_data/tract_level_filing_rate.csv")
+
+# Eviction Trends
+eviction_trends <- read.csv("eviction_data/trends_eviction.csv")
+
+# Monthly Unemployment Rates
+unemployment_monthly <- read_xlsx("eviction_data/unemployment_rate_montly.xlsx")
+
+# Consumer Price Index
+consumer_price_index <- read_xlsx("eviction_data/consumer_price_index_monthly.xlsx")
+
+#Financial Health Data
+financial_health <- read_xlsx("eviction_data/financial-health-of-residents-data.xlsx")
+
+```
+
+# Exploratory Data Analysis - Tract Fillings, and Predictors
+
+To begin we examine tract filing data.
+
+```{r Eda_Slide_1}
+# Investigate the data set
+
+head(tract_filings, 50)
+
+```
+
+Next We import census geometry to join and visualize tract filing data
+
+```{r Census Tracts}
+
+# Import Census Tract Geometry
+options(tigris_use_cache = TRUE)
+
+# Import for Philadelphia 
+philadelphia_tracts <- tracts(state = "PA", county = "Philadelphia", year = 2022)
+
+# Look at Results
+plot(philadelphia_tracts$geometry)
+
+```
+# Join Tracts to Filings
+
+```{r Join_tracts_filings}
+
+# Make Sure Format Matches
+philadelphia_tracts$GEOID <- as.character(philadelphia_tracts$GEOID)
+tract_filings$id <- as.character(tract_filings$id)
+
+# Join
+evictions_geo <- philadelphia_tracts %>%
+  left_join(tract_filings, by = c("GEOID" = "id"))
+
+```
+
+Here a map is made of tract filings.
+
+```{r}
+
+
+ggplot(evictions_geo) +
+  geom_sf(aes(fill = month_rate), color = NA) +
+  scale_fill_viridis_c(option = "magma") +
+  labs(
+    title = "Eviction Rate by Census Tract",
+    fill = "Eviction Rate"
+  ) +
+  theme_minimal()
+
+```
+
+OTHER EDAS GO HERE
+
+# Choice of Dependent Variable
+The dependent variable in this analysis is percentage_diff, which measures the monthly deviation of eviction filings from a long-term baseline. Rather than modeling raw eviction counts, this transformation captures relative change in eviction activity, allowing the analysis to focus on fluctuations around typical levels. This is particularly important in Philadelphia and other large cities, where eviction volumes vary seasonally and were disrupted by major economic disruptions such as the COVID-19. By using a normalized measure, the model isolates meaningful economic variation instead of conflating structural patterns with short-term dynamics.
+
+From an economic perspective, percentage_diff is better suited than raw counts because it reflects marginal responses to changing conditions, which is the core interest of applied economic analysis. Labor market shocks, inflation, and household financial stress do not directly determine how many eviction cases exist in absolute terms; instead, they influence whether eviction pressure rises or falls relative to normal conditions. Modeling deviations from a baseline aligns the dependent variable with economic theory on cyclical stress, making the results more applicable for policy analysis and more appropriate for regression-based inference.
+
+
+# Data Cleaning
+
+This restructures the economic and financial datasets to make them analytically compatible with monthly eviction data. The Urban Institute financial health dataset comes in a report-style format rather than a machine-ready table, with multiple header and metadata rows embedded in the file. To correct this, we make row 4 the column headers, replace missing or blank column names with placeholders to allow selection and filtering, remove non-data rows, and isolate the row corresponding to Philadelphia. All remaining variables are then changed to numeric format, ensuring that these indicators—such as debt burden, housing cost stress, and labor force participation—can be used in regression-based modeling. These steps are necessary because model estimation and validation require numeric, consistently formatted inputs.
+
+The Consumer Price Index and unemployment datasets require a different but similar cleaning approach because both are come in wide, month-column formats with extensive metadata. We identify the true header rows, remove non-data rows, convert month columns to numeric values, and reshape each dataset into a long format with one row per year–month observation. These transformations are important because the eviction outcome is measured monthly, and predictive modeling requires all time-varying variables to align. A month lookup table is made to convert month names into numeric values, ensuring consistent joins across datasets. The cleaned CPI and unemployment data are then merged into the monthly eviction trend dataset using year and month keys.
+
+Finally, the cleaned Urban Institute financial indicators are appended to the eviction trends dataset using a dummy join, reflecting the fact that these measures describe baseline household financial vulnerability rather than month-specific disruptions. Lagged versions of key eviction outcome variables are then constructed to capture temporal lag in eviction activity, a main feature of eviction processes given legal delays and accumulated financial stress. These lag variables enable the model to distinguish between short-term economic fluctuations and ongoing eviction patterns.
+
+***Note: Thus far we had not had any issues with the Urban Institute Data, later will reveal why it is more difficult for this analysis***
+
+
+```{r}
+
+# Data Cleaning
+
+
+# Clean Financial Health Data
+financial_health_clean <- financial_health
+
+# Use row 4 as header
+names(financial_health_clean) <- as.character(unlist(financial_health_clean[4, ]))
+
+# Replace blank/NA column names with placeholders
+bad_name_index <- which(is.na(names(financial_health_clean)) | names(financial_health_clean) == "")
+if (length(bad_name_index) > 0) {
+  names(financial_health_clean)[bad_name_index] <- paste0("col_", seq_along(bad_name_index))
+}
+
+# Remove metadata rows 1–4, keep Philadelphia only
+financial_health_clean <- financial_health_clean[-(1:4), ] %>%
+  filter(City == "Philadelphia, PA")
+
+# Convert all but City to numeric
+financial_health_numeric_columns <- setdiff(names(financial_health_clean), "City")
+financial_health_clean[financial_health_numeric_columns] <-
+  lapply(financial_health_clean[financial_health_numeric_columns], as.numeric)
+
+
+
+# Clean CPI Data
+cpi_wide <- consumer_price_index
+
+# Real header is row 11
+names(cpi_wide) <- as.character(unlist(cpi_wide[11, ]))
+cpi_wide <- cpi_wide[-(1:11), ]
+
+cpi_wide$Year <- as.integer(as.numeric(cpi_wide$Year))
+
+cpi_month_names <- c("Jan","Feb","Mar","Apr","May","Jun",
+                     "Jul","Aug","Sep","Oct","Nov","Dec")
+
+# Convert month columns to numeric
+for (col in cpi_month_names) {
+  if (col %in% names(cpi_wide)) {
+    cpi_wide[[col]] <- as.numeric(cpi_wide[[col]])
+  }
+}
+
+# Month lookup table
+month_lookup <- data.frame(
+  month_name = cpi_month_names,
+  month = 1:12
+)
+
+# Convert CPI to long format
+cpi_long <- cpi_wide %>%
+  select(Year, all_of(cpi_month_names)) %>%
+  pivot_longer(cols = all_of(cpi_month_names),
+               names_to = "month_name",
+               values_to = "cpi") %>%
+  filter(!is.na(cpi)) %>%
+  left_join(month_lookup, by = "month_name") %>%
+  rename(year = Year)
+
+
+
+# Clean Unemployment Data
+unemployment_wide <- unemployment_monthly
+
+# Row 10 is the real header
+names(unemployment_wide) <- as.character(unlist(unemployment_wide[10, ]))
+unemployment_wide <- unemployment_wide[-(1:10), ]
+
+unemployment_wide$Year <- as.integer(as.numeric(unemployment_wide$Year))
+
+unemployment_month_names <- c("Jan","Feb","Mar","Apr","May","Jun",
+                              "Jul","Aug","Sep","Oct","Nov","Dec")
+
+# Convert month columns to numeric
+for (col in unemployment_month_names) {
+  if (col %in% names(unemployment_wide)) {
+    unemployment_wide[[col]] <- as.numeric(unemployment_wide[[col]])
+  }
+}
+
+# Convert unemployment data to long format
+unemployment_long <- unemployment_wide %>%
+  select(Year, all_of(unemployment_month_names)) %>%
+  pivot_longer(cols = all_of(unemployment_month_names),
+               names_to = "month_name",
+               values_to = "unemployment_rate") %>%
+  filter(!is.na(unemployment_rate)) %>%
+  left_join(month_lookup, by = "month_name") %>%
+  rename(year = Year)
+
+
+
+# Clean Monthly Eviction Trend Data
+# Parse month and year
+eviction_trends_clean <- eviction_trends %>%
+  mutate(
+    month_num = as.integer(substr(month, 1, 2)),
+    year      = as.integer(substr(month, 4, 7)),
+    month_date = paste0(year, "-", month_num, "-01")
+  )
+
+# Merge with unemployment and CPI
+eviction_trends_merged <- eviction_trends_clean %>%
+  left_join(unemployment_long,
+            by = c("year" = "year", "month_num" = "month")) %>%
+  left_join(cpi_long,
+            by = c("year" = "year", "month_num" = "month"))
+
+# Attach Urban Institute financial variables
+eviction_trends_merged <- eviction_trends_merged %>%
+  mutate(dummy = 1) %>%
+  left_join(financial_health_clean %>% mutate(dummy = 1), by = "dummy") %>%
+  select(-dummy)
+
+# Add lag variables
+eviction_trends_final <- eviction_trends_merged %>%
+  arrange(year, month_num) %>%
+  mutate(
+    l1_filings = lag(month_filings, 1),
+    l1_percentage_diff = lag(percentage_diff, 1)
+  )
+
+```
+
+
+# Assess if Data Cleaning Worked
+
+Here we check to see if our new data sets are how we intended them.
+
+```{r}
+
+# Check Financial Health
+cat("Financial Health Clean")
+print(str(financial_health_clean))
+print(head(financial_health_clean))
+
+
+# Check CPI Long Format
+cat("CPI Long Format")
+print(str(cpi_long))
+print(head(cpi_long))
+
+
+# Check Unemployment Long Format
+cat("Unemployment Long Format")
+print(str(unemployment_long))
+print(head(unemployment_long))
+
+
+# Check Eviction Data
+cat("Eviction Trends Final After Macro UI Merge & Lag")
+print(str(eviction_trends_final))
+print(head(eviction_trends_final))
+
+```
+# Creating the Model
+
+
+# Step 1: Creating the Model Data Set
+
+This step constructs the modeling dataset used for regression analysis. Each row in the resulting dataset represents a single month, with aligned economic, financial, and temporal predictors. The dependent variable, percentage_diff, measures how eviction filings in a given month deviate from a historical average, making it a continuous outcome well suited for linear regression. Predictor variables include lagged eviction activity (l1_percentage_diff) to capture temporal lag, macroeconomic indicators (unemployment_rate, cpi) to reflect short-term economic conditions, and Urban Institute financial health indicators that quantify underlying household vulnerability. Observations with missing outcome values are removed to ensure valid model estimation and consistent sample sizes across all predictors.
+
+Ordinary Least Squares (OLS) regression is an appropriate and intentional modeling choice for this dataset given both the structure of the outcome and the nature of the predictors. The dependent variable is continuous and approximately symmetric around its mean, rather than binary or integer-count based, ruling out logistic and Poisson-style models. The predictors are a mix of continuous economic measures and proportion-based indicators, all of which naturally conform to the linear framework assumed by OLS. OLS also offers transparent coefficient interpretation, allowing each variable’s association with eviction deviations to be directly assessed, an important requirement for a policy-focused project. Additionally, OLS performs well with moderate sample sizes and does not impose unnecessary distribution assumptions beyond linearity and conditional independence. This makes OLS regression suitable for evaluating how economic disruptions and financial vulnerability jointly shape month-to-month eviction dynamics.
+
+
+```{r}
+# Prepare modeling dataset 
+
+model_df <- eviction_trends_final %>%
+  select(
+    year, month_num,
+    month_filings,
+    percentage_diff,
+    l1_percentage_diff,
+    unemployment_rate,
+    cpi,
+    Overall,
+    `White areas`,
+    `Nonwhite areas`,
+    `% with`,
+    `Median amount among those with`,
+    `% housing-cost burdened, low-income`,
+    `% with home foreclosure`,
+    `% unbanked, metro area`,
+    `% received EITC, low-income`,
+    `Labor force participation rate`,
+    `% below 200% of federal poverty level`,
+    `Gini index of income inequality`
+  ) %>%
+  filter(!is.na(percentage_diff))
+
+```
+
+
+# Step 2: Fit Regression Model
+
+Here the model is fit with the predictors.
+
+# Important Finding
+
+The regression results revealed an important characteristic of the Urban Institute (UI) financial health variables. Although they are meaningful, they do not vary within the temporal unit used for modeling. Because remain constant across all rows in the monthly dataset, these variables are perfectly collinear with the model intercept and are therefore dropped during estimation due to singularities. This behavior is expected under Ordinary Least Squares. More time would be needed to fully assess and correct this issue or to source new data with the same measures. Despite not receiving individual coefficient estimates, the UI variables still play an important conceptual role in the analysis. They provide context for the economic environment in which evictions occur, anchoring short-term fluctuations in broader measures of financial vulnerability such as housing cost burden, foreclosure prevalence, and income inequality. Rather than being interpreted as predictors, these variables help frame the limits of month-to-month responsiveness by describing the underlying baseline risk faced by households in Philadelphia.
+
+```{r}
+
+eviction_model <- lm(
+  percentage_diff ~ 
+    l1_percentage_diff +
+    unemployment_rate +
+    cpi +
+    `Median amount among those with` +
+    `% housing-cost burdened, low-income` +
+    `% with home foreclosure` +
+    `% unbanked, metro area` +
+    `% received EITC, low-income` +
+    `Labor force participation rate` +
+    `% below 200% of federal poverty level` +
+    `Gini index of income inequality`,
+  data = model_df
+)
+
+summary(eviction_model)
+
+```
+
+
+# Calculating Errors - Root Mean Squared Error and Mean Average Error - This evaluates in sample error
+
+# Model Validation and Error Analysis
+
+In-sample prediction error metrics were performed because the model includes lagged outcomes and economic predictors that are not observed for all periods, the regression was estimated using complete cases only. Validation was therefore first conducted on the same set of observations used in model estimation to ensure consistency between predicted and observed outcomes. Fitted values and residuals were extracted directly from the regression object to avoid misalignment caused by missing values.
+
+Two standard error metrics were used to summarize model accuracy: Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE). MAE provides a measure of average deviation between predicted and observed eviction pressure, while RMSE penalizes larger errors more heavily and highlights sensitivity to extreme under- or over-prediction. Together, these metrics provide a concise assessment of model fit and establish a baseline level of predictive performance prior to out-of-sample validation.
+
+```{r}
+
+# Model Validation: RMSE and MAE
+
+# Extract the data actually used by the model because of UI data issues
+model_used <- eviction_model$model
+
+# Extract fitted values and residuals 
+predicted <- eviction_model$fitted.values
+residuals <- eviction_model$residuals
+
+# Compute MAE
+mae <- mean(abs(residuals))
+
+# Compute RMSE
+rmse <- sqrt(mean(residuals^2))
+
+# Output results
+cat("Model Performance Metrics:\n")
+cat("MAE  =", round(mae, 4), "\n")
+cat("RMSE =", round(rmse, 4), "\n")
+
+
+
+```
+
+# Test Train Split Validation - this is our control for out of sample validation
+
+# Step 1 - Create Train and Test Splits
+
+This step implements a time-based train–test split to evaluate the model’s out-of-sample predictive performance. Observations are first ordered chronologically using numeric year and month variables. The dataset is then divided such that all observations prior to 2023 are used for model training, while observations from 2023 onward are reserved for testing. This corresponds to using approximately 75–80% of the available time series for training and the remaining 20–25% for out-of-sample evaluation, depending on the exact temporal coverage of the dataset. Unlike random splits, this approach mirrors real-world forecasting conditions by ensuring the model is evaluated only on future observations it has not seen during estimation.
+
+This time-based split is intentionally chosen because the outcome of interest, (monthly changes in eviction activity) is inherently temporal. Randomly assigning observations to training and testing would risk temporal leakage, where the model indirectly learns from future data points. By training on earlier years and testing on later ones, this validation strategy provides a more realistic assessment of how well the model generalizes to new economic conditions. After splitting, complete-case filtering is applied consistently to both training and test sets to ensure the same variables are available in each, preventing estimation or prediction errors caused by missing values.
+
+```{r}
+# Train–Test Split
+
+# Make numeric time variables
+model_df_tt <- model_df %>%
+  mutate(
+    year_num  = as.integer(year),
+    month_num = if ("month_num" %in% names(.)) month_num else as.integer(substr(month, 1, 2))
+  ) %>%
+  arrange(year_num, month_num)
+
+# Train–test split by time
+train_df <- model_df_tt %>% filter(year_num < 2023)
+test_df  <- model_df_tt %>% filter(year_num >= 2023)
+
+# Variables used in the model
+model_vars <- c(
+  "percentage_diff",
+  "l1_percentage_diff",
+  "unemployment_rate",
+  "cpi",
+  "Median amount among those with",
+  "% housing-cost burdened, low-income",
+  "% with home foreclosure",
+  "% unbanked, metro area",
+  "% received EITC, low-income",
+  "Labor force participation rate",
+  "% below 200% of federal poverty level",
+  "Gini index of income inequality"
+)
+
+# Keep only complete cases
+train_df_clean <- train_df %>%
+  filter(if_all(all_of(model_vars), ~ !is.na(.)))
+
+test_df_clean <- test_df %>%
+  filter(if_all(all_of(model_vars), ~ !is.na(.)))
+
+```
+
+
+# Step 2 - Fit Model on Training Data
+
+We now fit the new split data on a model.
+
+```{r}
+
+# Fit Model on Training Data
+
+eviction_model_train <- lm(
+  percentage_diff ~ 
+    l1_percentage_diff +
+    unemployment_rate +
+    cpi +
+    `Median amount among those with` +
+    `% housing-cost burdened, low-income` +
+    `% with home foreclosure` +
+    `% unbanked, metro area` +
+    `% received EITC, low-income` +
+    `Labor force participation rate` +
+    `% below 200% of federal poverty level` +
+    `Gini index of income inequality`,
+  data = train_df_clean
+)
+
+```
+
+# Step 3 - Predict on Test Data
+
+This step evaluates the predictive accuracy of the trained eviction model using the test dataset, which contains observations not used during model estimation. The model is applied to the test data to generate predicted values of monthly eviction changes, and these predictions are then compared to the observed outcomes. The differences between predicted and actual values (residuals) quantify how far the model’s forecasts deviate from reality when applied out of sample.
+
+To summarize prediction error, we calculate Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE). MAE captures the average size of prediction mistakes, while RMSE places greater weight on larger errors, highlighting periods where the model performs particularly poorly. Reporting both metrics provides a robust assessment of out-of-sample performance and demonstrates that the model is not only statistically meaningful in-sample but also useful for forecasting future eviction trends.
+
+```{r}
+
+# Out-of-Sample Validation - Test Set
+
+# Predict on test set
+test_predictions <- predict(
+  eviction_model_train,
+  newdata = test_df_clean
+)
+
+# Residuals
+test_residuals <- test_df_clean$percentage_diff - test_predictions
+
+# MAE
+mae_test <- mean(abs(test_residuals))
+
+# RMSE
+rmse_test <- sqrt(mean(test_residuals^2))
+
+# Output
+cat("Out-of-Sample Model Performance:\n")
+cat("MAE  =", round(mae_test, 4), "\n")
+cat("RMSE =", round(rmse_test, 4), "\n")
+
+```
+
+
+# Comparison of in-sample and out-of-sample Errors
+
+Here a new data frame is created to chart the difference between the in-sample, and out-of-sample error analyses.
+
+```{r}
+
+# Prepare error data for comparison
+
+# In-sample errors
+in_sample_errors <- data.frame(
+  residual = eviction_model$residuals,
+  sample_type = "In-sample"
+)
+
+# Out-of-sample errors
+out_sample_errors <- data.frame(
+  residual = test_residuals,
+  sample_type = "Out-of-sample"
+)
+
+# Combine
+error_compare_df <- rbind(in_sample_errors, out_sample_errors)
+
+# Plot
+ggplot(error_compare_df, aes(x = residual, fill = sample_type)) +
+  geom_histogram(
+    alpha = 0.6,
+    bins = 30,
+    position = "identity"
+  ) +
+  facet_wrap(~ sample_type, scales = "free_y") +
+  labs(
+    title = "Comparison of Prediction Errors",
+    subtitle = "In-sample vs Out-of-sample Residual Distributions",
+    x = "Prediction Error (Residual)",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+```
+
+
