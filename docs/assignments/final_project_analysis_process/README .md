@@ -37,7 +37,7 @@ The model employs ordinary least squares (OLS) fitting to assess the impact of m
 1. Model Explanatory Power
 * **Adjusted $R^2$:** Approximately **$0.865$**. The model exhibits exceptionally high explanatory power for monthly eviction fluctuations (`percentage_diff`), which is a critical factor.
 
-#### 2. 核心预测因子分析
+#### 2. Core Predictor Analysis
 
 Eviction Predictor Project Key Summary
 Project Objective: Utilize an OLS linear regression model to forecast fluctuations in Philadelphia's monthly eviction petition activity relative to historical baseline (percentage_diff).
