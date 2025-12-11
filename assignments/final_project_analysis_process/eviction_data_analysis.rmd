@@ -123,6 +123,84 @@ ggplot(evictions_geo) +
 
 OTHER EDAS GO HERE
 
+
+#Hotspots
+```{r}
+library(sf)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+# 1. Read CSV
+hotspots <- read_csv("hotspots/philadelphia_hotspots_media_report.csv")
+
+# 2. Convert to sf object
+hotspots_sf <- st_as_sf(
+  hotspots,
+  coords = c("lon", "lat"),
+  crs = 4326
+)
+# 1. Read tract boundary
+tracts <- st_read("border/Census_Blocks_2010.geojson")
+
+# 2. Reproject hotspots to match tracts CRS
+hotspots_sf <- st_transform(hotspots_sf, st_crs(tracts))
+
+# 3. Map tracts + hotspots
+ggplot() +
+  geom_sf(data = tracts, fill = "grey95", color = "white") +
+  geom_sf(
+    data = hotspots_sf,
+    aes(size = filings),
+    alpha = 0.7
+  ) +
+  scale_size_continuous(name = "Eviction filings") +
+  labs(
+    title = "Eviction Hotspots over Census Tracts",
+    subtitle = "Top 100 buildings in Philadelphia",
+    caption = "Source: Eviction Tracking System, ACS, Census tracts"
+  ) +
+  theme_minimal()
+```
+Eviction filings exhibit marked geographic concentration in Philadelphia. North Philadelphia (40.05°N-40.15°N) shows the densest clustering with 100+ filings, reflecting historically disinvested, predominantly Black neighborhoods. West Philadelphia and South Philadelphia display secondary hotspots (50-75 filings), while Northeast suburbs show minimal activity. This stark contrast demonstrates housing instability is geographically concentrated among vulnerable populations. For predictive modeling, spatial clustering indicates temporal lag effects and racialized patterns reflecting structural inequality. The geographic specificity enables targeted prevention interventions in highest-need areas, though we acknowledge filings may reflect both tenant vulnerability and landlord enforcement variation.
+
+# trends
+
+```{r}
+#| fig-align: "center"
+#| out-width: "100px"
+#| echo: false
+
+knitr::include_graphics("trends.png")
+
+```
+
+Dataset contains 72 monthly observations from January 2020 to December 2024 (5 years) with eviction filing counts, historical averages, and deviation metrics.
+Key Findings
+Temporal Trends: Eviction filings show clear recovery pattern post-2020. 2020-2021 experienced dramatic suppression (COVID-19 moratoriums), with filings dropping to near-zero in April-June 2020. Recovery accelerated from 2022 onwards, stabilizing around 1,000-1,200 filings monthly by 2023-2024.
+Seasonality: Weak seasonal pattern exists—January and August show slightly elevated filings (1.55× and 1.55× of average), while April-May show lower activity (0.20× and 0.16× of average 2020-2021 data). This reflects policy implementation timing.
+Year-over-Year Comparison: 2024 average (1,061 filings) closely mirrors 2023 (1,059 filings), indicating market stabilization post-recovery. 2025 preliminary data suggests continued stability with minor volatility.
+Volatility: Coefficient of variation decreased over time, showing market normalization after pandemic disruptions. Recent years exhibit more predictable patterns than 2020-2021 volatility.
+Implications
+Data supports stable eviction environment with predictable monthly volumes suitable for forecasting models.
+
+# trends
+
+```{r}
+#| fig-align: "center"
+#| out-width: "100px"
+#| echo: false
+
+knitr::include_graphics("price.png")
+
+```
+
+hiladelphia Census Tracts: Geospatial Analysis
+These choropleth maps visualize key socioeconomic indicators across Philadelphia's census tracts, revealing significant spatial disparities in poverty rates, unemployment, rent burden, and demographic composition. The darker regions indicate higher concentrations of economic vulnerability, with notable clustering in North and West Philadelphia tracts showing elevated poverty, unemployment, and rental cost burdens exceeding 30% of household income. Demographic analysis reveals stark residential segregation patterns, with distinct geographic concentrations of racial and ethnic populations. These spatial patterns align with historical inequities in housing access, economic opportunity, and community investment, providing critical context for understanding eviction vulnerability and housing instability across the city.
+
+
 # Choice of Dependent Variable
 The dependent variable in this analysis is percentage_diff, which measures the monthly deviation of eviction filings from a long-term baseline. Rather than modeling raw eviction counts, this transformation captures relative change in eviction activity, allowing the analysis to focus on fluctuations around typical levels. This is particularly important in Philadelphia and other large cities, where eviction volumes vary seasonally and were disrupted by major economic disruptions such as the COVID-19. By using a normalized measure, the model isolates meaningful economic variation instead of conflating structural patterns with short-term dynamics.
 
