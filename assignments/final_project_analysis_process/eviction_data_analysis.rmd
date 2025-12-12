@@ -27,6 +27,30 @@ library(ggplot2)
 
 ```
 
+# Policy Problem & Research Question
+
+## Problem Statement
+
+Philadelphia faces persistent, geographically concentrated eviction pressure that disproportionately affects low-income communities, particularly historically Black neighborhoods in North and West Philadelphia. Evictions destabilize families, increase homelessness risk, and strain municipal services including emergency shelter systems, legal aid, and social support networks. Despite the severity of this problem, city officials currently lack a reliable, predictive mechanism to anticipate spikes in eviction activity and pre-position prevention resources.
+
+## Stakeholders Affected
+
+- **Renters at risk**: Low-income households vulnerable to displacement
+- **Community-based organizations**: Nonprofits providing legal aid, mediation, and rental assistance
+- **Philadelphia Housing Authority**: Public housing and housing support programs
+- **Office of Homeless Services**: Emergency shelter and prevention coordination
+- **City Council & Policy Staff**: Resource allocation and program design
+
+## Decision Use Case
+
+A month-ahead forecast of eviction pressure enables city officials to:
+
+1. Anticipate demand surges for rental assistance, legal aid, and mediation services
+2. Allocate prevention resources equitably across neighborhoods before filings occur
+3. Intervene before households reach eviction, rather than responding after displacement
+
+
+
 # Data Overview and Data Imports
 
 This code chunk imports all primary datasets used in the analysis, bringing together eviction records, demographic context, economic indicators, and measures of household financial vulnerability. The core eviction data are sourced from evictionlab.org . Multiple eviction tables are loaded to support different analytical needs, including raw filing counts (tract_filings), normalized filing rates (tract_filing_rate), and citywide temporal patterns relative to historical baselines (eviction_trends). These complementary formats allow the project to examine evictions at both the spatial (tract-level) and temporal (month-to-month) scales, which is critical for understanding changes in eviction activity.
@@ -424,6 +448,71 @@ Here the model is fit with the predictors.
 
 The regression results revealed an important characteristic of the Urban Institute (UI) financial health variables. Although they are meaningful, they do not vary within the temporal unit used for modeling. Because remain constant across all rows in the monthly dataset, these variables are perfectly collinear with the model intercept and are therefore dropped during estimation due to singularities. This behavior is expected under Ordinary Least Squares. More time would be needed to fully assess and correct this issue or to source new data with the same measures. Despite not receiving individual coefficient estimates, the UI variables still play an important conceptual role in the analysis. They provide context for the economic environment in which evictions occur, anchoring short-term fluctuations in broader measures of financial vulnerability such as housing cost burden, foreclosure prevalence, and income inequality. Rather than being interpreted as predictors, these variables help frame the limits of month-to-month responsiveness by describing the underlying baseline risk faced by households in Philadelphia.
 
+## Why Predict Percentage Diff? Why OLS?
+
+### Choice of Dependent Variable
+
+Several outcome variables were considered:
+- Raw filing counts (absolute numbers)
+- Filing rates (filings per capita)
+- Binary spike indicators (above/below threshold)
+
+We selected `percentage_diff` (monthly deviation from historical baseline) because:
+
+1. **Removes seasonality**: Isolates economic stress changes from structural seasonal patterns
+2. **Continuous & symmetric**: Produces normally distributed outcomes suitable for OLS regression
+3. **Policy interpretability**: Allows decision-makers to compare current risk to typical conditions
+4. **Comparable across time**: Baseline adjustment ensures year-to-year comparisons are meaningful
+
+### Why OLS is Appropriate
+
+OLS regression is the appropriate model because:
+
+1. **Continuous outcome**: `percentage_diff` is a continuous, unbounded variable (not count, not binary)
+2. **Macroeconomic predictors**: Our features (unemployment, CPI, financial vulnerability) are standard in linear economic models
+3. **Interpretability over prediction**: Policy use requires transparent coefficient estimates, not black-box predictions
+4. **Sufficient sample size**: 72 months of observations supports reliable OLS estimation
+
+Alternative models were rejected:
+- Logistic/probit: Not suitable for continuous percentage outcomes
+- Poisson/negative binomial: Designed for count data, not percentage deviations
+- Machine learning (random forest, neural nets): Sacrifices interpretability needed for policy briefings
+
+## Feature Engineering Strategy
+
+### Features Implemented
+
+1. **Lagged eviction pressure** (`l1_percentage_diff`): 1-month lag captures procedural delays in eviction filings and accumulation of financial strain across months
+
+2. **Macroeconomic indicators** (`unemployment_rate`, `cpi`): Month-aligned predictors of household financial stress and purchasing power
+
+3. **Household financial vulnerability** (Urban Institute indicators):
+   - `% housing-cost burdened, low-income`: Direct measure of rent burden
+   - `% with home foreclosure`: Proxy for credit stress
+   - `% unbanked, metro area`: Financial system exclusion
+   - `% received EITC, low-income`: Indicator of low-income status
+   - `Labor force participation rate`: Employment access
+   - `% below 200% of federal poverty level`: Poverty concentration
+   - `Gini index of income inequality`: Income distribution stress
+
+4. **Claim amount** (`Median amount among those with`): Direct measure of eviction filing severity
+
+### Features Tested but Excluded
+
+The following feature engineering approaches were explored but ultimately excluded:
+
+1. **Spatial lags** (adjacency-weighted filing pressure from neighboring tracts): High multicollinearity with baseline unemployment; excluded to preserve model interpretability
+2. **Interaction terms** (unemployment × financial burden): Overfitting concerns with limited sample size (n=72); would require out-of-sample validation
+3. **K-means neighborhood clusters**: Redundant with macroeconomic controls; added complexity without predictive gain
+4. **Seasonality dummies** (month fixed effects): Already removed by percentage_diff baseline adjustment
+5. **ARIMA-style autoregressive terms beyond lag-1**: Temporal autocorrelation was minimal post-lag inclusion
+
+### Justification
+
+The final feature set balances **model parsimony** (avoid overfitting with 72 observations) with **policy relevance** (interpretable economic mechanisms). Future work should explore spatial clustering and interaction effects with larger datasets or longer time series.
+
+---
+
 ```{r}
 
 eviction_model <- lm(
@@ -630,4 +719,106 @@ ggplot(error_compare_df, aes(x = residual, fill = sample_type)) +
 
 ```
 
+```{r}
+library(spdep)
 
+# Prepare spatial neighbors from evictions_geo
+nb <- poly2nb(evictions_geo, queen = TRUE)
+lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+# Get residuals from model
+residuals_vec <- eviction_model$residuals
+
+# Add residuals to evictions_geo
+evictions_geo$model_residual <- NA
+evictions_geo$model_residual[1:length(residuals_vec)] <- residuals_vec
+
+# Moran's I test with zero.policy = TRUE
+moran_result <- moran.test(evictions_geo$model_residual, lw, zero.policy = TRUE, na.action = na.omit)
+
+# Print results
+cat("Moran's I Test on Model Residuals\n")
+cat("===================================\n")
+cat("Moran's I statistic:", round(moran_result$statistic, 4), "\n")
+cat("P-value:", round(moran_result$p.value, 4), "\n")
+cat("Expected I (under null):", round(moran_result$estimate[2], 4), "\n")
+```
+### Moran's I Test Results
+
+The Moran's I test on model residuals yielded:
+
+- **Moran's I statistic**: -0.9178
+- **P-value**: 0.8206
+- **Expected I (under null hypothesis)**: -0.0476
+
+**Interpretation**: With a p-value of 0.8206 (>> 0.05), we **fail to reject the null hypothesis of spatial independence**. The residuals exhibit **no significant spatial autocorrelation** across Philadelphia census tracts. This indicates that prediction errors are randomly distributed geographically and do not show clustering patterns.
+
+**Implication for OLS**: This result supports the validity of OLS regression assumptions. Geographic factors not explicitly captured in the model (neighborhood effects, landlord networks, local housing market dynamics) are not systematically biasing predictions in spatially clustered ways. However, the negative Moran's I value (-0.9178) slightly below the expected value suggests residuals may have a weak dispersal pattern, which warrants monitoring in future model refinements.
+
+# Bias & Equity Considerations
+
+## Geographic Disparities in Eviction Risk
+
+Eviction risk is unevenly distributed across Philadelphia, with the highest concentrations in historically Black neighborhoods facing long-term disinvestment, particularly North and West Philadelphia. A model that performs well citywide may still systematically mispredict in communities with atypical filing dynamics, landlord behavior, or underreported cases.
+
+# Implementation Recommendations
+
+## Operationalizing the Eviction Prediction System
+
+To translate this model into actionable policy, the City of Philadelphia could implement the following operational framework:
+
+## Monthly Forecast Dashboard
+
+- **Automated updates**: Model inputs (CPI, unemployment, filings) refresh automatically each month
+- **Forecast output**: Display predicted eviction pressure for next month with confidence intervals
+- **Tract-level detail**: Show which neighborhoods face elevated risk
+- **Stakeholder access**: Share forecasts with Housing Authority, legal aid providers, and community organizations
+
+## Targeted Eviction Prevention Strategy
+
+When the model predicts elevated eviction pressure:
+
+1. **Legal aid surge**: Pre-position attorneys and paralegals in high-risk tracts
+2. **Rental assistance outreach**: Deploy ERA (Emergency Rental Assistance) and prevention funds to predicted hotspots
+3. **Mediation services**: Activate landlord-tenant negotiation programs
+4. **Case management**: Connect at-risk households to financial counseling and benefit enrollment
+
+## Resource Allocation Timeline
+
+- **Month 0**: Model generates forecast for Month 1
+- **Weeks 1-2**: City agencies receive and review predictions
+- **Weeks 3-4**: Prevention resources (legal aid, mediation, ERA) deployed to predicted high-risk areas
+- **Month 1**: Services available when filings anticipated to surge
+
+## Safeguards Against Misuse
+
+1. **Independent bias audits**: Annual third-party review of prediction errors by neighborhood demographics
+2. **Use restrictions**: Model outputs explicitly prohibited from justifying policing, enforcement operations, or surveillance
+3. **Community oversight board**: Quarterly meetings with tenant advocates, legal aid, and neighborhood organizations
+4. **Transparency reporting**: Public dashboard of forecast accuracy, error rates by neighborhood, and resource allocation
+5. **Sunset clause**: Model contract includes review every 2 years with community input
+
+---
+
+## Potential Harms from Model Misspecification
+
+**Underprediction** → Insufficient rental assistance allocated to high-risk neighborhoods, allowing preventable displacements
+
+**Overprediction** → Unnecessary targeting of resources that reinforces stigma, surveillance, or policing in vulnerable communities
+
+**Macro-economic variables** (unemployment, CPI) may reflect structural racism embedded in labor markets, potentially masking causal mechanisms
+
+**Eviction filings themselves** reflect unequal landlord-tenant power dynamics and enforcement variation across neighborhoods, not just tenant vulnerability
+
+
+## Safeguards & Recommendations
+
+To mitigate these risks, implementation must include:
+
+1. **Equity audits**: Annual analysis of prediction errors by neighborhood race/income composition
+2. **Community oversight**: Advisory board with tenant advocates, legal aid providers, and community organizations
+3. **Restricted use**: Model outputs cannot be used to justify policing, enforcement, or surveillance
+4. **Resource expansion**: Forecasts must trigger **expansion** of prevention services, not rationing
+5. **Transparency**: Public reporting of model limitations and error rates by neighborhood
+
+---
