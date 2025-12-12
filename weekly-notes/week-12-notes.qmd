@@ -1,0 +1,136 @@
+---
+title: "Week 12 Notes"
+date: "2025-11-24"
+---
+## Key Concepts Learned
+
+### Why Sequences Matter
+- **Problem with snapshots**: Traditional analysis looks at neighborhoods at one time point (e.g., gentrifying in 2010)
+- **Missing piece**: The full longitudinal trajectory—how did it get here?
+- **Example**: Two neighborhoods both look like they're gentrifying in 2010, but one improved steadily since 1970, the other declined then recovered
+- **Policy implication**: Same 2010 snapshot → different histories → different policy needs
+
+### 5-Step Methodological Workflow
+1. **K-means clustering**: Classify neighborhoods at each time point
+2. **Create sequences**: Combine classifications over time into one trajectory per neighborhood
+3. **Measure dissimilarity**: Calculate how different sequences are (OMstrans algorithm)
+4. **Hierarchical clustering**: Group similar sequences together
+5. **Map results**: Visualize spatial patterns of trajectory types
+
+## Coding Techniques
+
+### Step 1: K-means Clustering
+```r
+# Standardize variables (z-scores for temporal consistency)
+census_scaled <- census_data %>%
+  mutate(across(c(college_pct, unemployment, poverty, home_value), scale))
+
+# K-means clustering (cluster all years together for consistency)
+kmeans_result <- kmeans(census_scaled, centers = 6, nstart = 25)
+
+# Get cluster assignments
+census_data$cluster <- kmeans_result$cluster
+```
+**Key decision**: Cluster all years together (not separately) to ensure temporal consistency
+
+### Step 2: Create Sequences with TraMineR
+```r
+# Reshape to wide format (one row per tract)
+census_wide <- census_data %>%
+  select(tract, year, cluster) %>%
+  pivot_wider(names_from = year, values_from = cluster)
+
+# Define sequence object
+seq_data <- seqdef(
+  census_wide,
+  var = c("1980", "1990", "2000", "2010", "2020"),
+  labels = c("White", "Black", "Hispanic", "Asian", "Black/Hisp", "White Mixed")
+)
+```
+
+### Step 3: Measure Dissimilarity with OMstrans
+```r
+# Calculate transition-based substitution costs
+submat <- seqsubm(seq_data, method = "TRATE", transition = "both")
+
+# Compute OMstrans dissimilarity
+dist_omstrans <- seqdist(
+  seq_data,
+  method = "OMstrans",  # Transition-aware, not just state-based
+  indel = 1,            # Insertion/deletion cost
+  sm = submat,          # Substitution cost matrix
+  otto = 0.1            # Origin-transition tradeoff (lower = emphasize order)
+)
+```
+**Why OMstrans**: Captures WHEN transitions happen, not just states. "White→Hispanic→Asian" ≠ "White→Asian→Hispanic"
+
+### Step 4: Hierarchical Clustering
+```r
+# Ward's method: minimize within-cluster variance
+hc <- hclust(as.dist(dist_omstrans), method = "ward.D2")
+
+# Cut dendrogram to get trajectory clusters
+trajectory_clusters <- cutree(hc, k = 14)
+
+# Add to data
+census_wide$traj_cluster <- trajectory_clusters
+```
+
+### Step 5: Visualize & Map
+```r
+# Plot trajectories by cluster
+seqIplot(seq_data, group = trajectory_clusters, sortv = "from.end")
+
+# Map results
+census_sf %>%
+  mutate(trajectory = trajectory_clusters) %>%
+  ggplot() + geom_sf(aes(fill = trajectory))
+```
+
+## Questions & Challenges
+
+### Choosing k in k-means
+- **Theory vs. math**: Mathematical optimum (k=3: mostly White, mostly Black, mostly Hispanic) ≠ substantive optimum
+- **Tutorial approach**: Test k=2 through k=10, choose k that balances fit AND interpretability
+- **More art than science**: Choose k that tells meaningful story about diversity gradations and change pathways
+
+### Choosing number of trajectory clusters
+- **No mathematical optimum** (unlike k-means)
+- **Rule of thumb**: Start with many clusters (20-30), then merge similar patterns
+- **Stop when**: You'd be merging opposite trajectories (e.g., "increasing White" + "increasing Hispanic")
+
+### OMstrans parameters
+- **indel**: Cost for insertion/deletion. Tutorial uses 1 (half of max substitution cost)
+- **otto**: Origin-transition tradeoff. Lower values (0.1) emphasize sequence order over endpoints
+- **norm**: Normalize by sequence length so different-length sequences are fairly compared
+
+## Connections to Policy
+
+### Chicago vs. Los Angeles
+- **Chicago School theories** (concentric zones, sector model) predicted regular spatial patterns from 1970-2010
+- **Data shows**: Chicago has persistent ring structure; LA has spatial fragmentation
+- **Policy takeaway**: Urban theories aren't universal—different cities follow different logics
+
+### Identifying Change Pathways
+**Common upgrading paths**: Struggling → Young urban; Blue collar → Young urban; Suburban → Elite suburban
+
+**Common declining paths**: Suburban → Blue collar; Blue collar → Struggling
+
+**Most common**: Stability at extremes (wealthy and poor neighborhoods don't change much)
+
+## Reflection
+
+### I Understand
+- Why snapshots miss the story (same endpoints, different pathways)
+- The workflow (k-means → sequences → OMstrans dissimilarity → hierarchical clustering → maps)
+- Why OMstrans matters (captures timing/order of transitions)
+
+### I Need More Practice
+- Choosing k: How do I balance "elbow method" with interpretability?
+- Interpreting cost matrices: What do specific transition costs tell us about the data?
+- Mapping the results: How do I present 14 different trajectory types effectively?
+
+### Next Steps
+1. Replicate tutorial code with different dataset
+2. Create publication-quality maps showing trajectory patterns
+3. Analyze how trajectory clusters correlate with displacement/gentrification outcomes

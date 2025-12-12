@@ -1,0 +1,121 @@
+---
+title: "Week 11 Notes"
+date: "2025-11-17"
+---
+## Key Concepts Learned
+
+### Panel Data
+- Same units (stations) observed over multiple time periods (hours)
+- Each row = station × hour combination
+- Advantage: Can track how demand changes WITHIN same station over time
+
+### Temporal Lags
+- `lag1Hour`, `lag3Hours`, `lag1day`: Demand from previous periods
+- Why: Demand is persistent—busy an hour ago → likely still busy now
+- Different from spatial lags (which use neighbor data)
+
+### Temporal Validation: NEVER REVERSE
+- **Rule**: Train on PAST → Test on FUTURE
+- **Why**: Building a forecasting system for future periods
+- **Wrong approach**: Training on Weeks 3-4 to test Weeks 1-2 (predicting the past!)
+- **Correct approach**: Training on Weeks 1-2 to test Weeks 3-4
+
+### Model Progression
+1. **Baseline**: Time + Weather
+2. **+ Lags**: Add lag1Hour, lag3Hours, lag1day
+3. **+ Demographics**: Add income, transit access, race
+4. **+ Fixed Effects**: `as.factor(station_id)` controls for station baselines
+5. **+ Holidays**: Special events
+
+## Coding Techniques
+
+### Create Panel with `expand.grid()`
+```r
+study.panel <- expand.grid(
+  from_station_id = unique(stations),
+  interval60 = seq(min_time, max_time, by = "1 hour")
+) %>%
+  left_join(trip_counts, by = c("interval60", "from_station_id")) %>%
+  mutate(Trip_Count = replace_na(Trip_Count, 0))
+```
+
+### Create Temporal Lags (SORT FIRST!)
+```r
+study.panel <- study.panel %>%
+  arrange(from_station_id, interval60) %>%  # CRITICAL
+  group_by(from_station_id) %>%
+  mutate(
+    lag1Hour = lag(Trip_Count, 1),
+    lag1day = lag(Trip_Count, 24)
+  )
+```
+
+### Time Features
+```r
+study.panel <- study.panel %>%
+  mutate(
+    hour = hour(interval60),
+    dotw = wday(interval60, label = TRUE),
+    weekend = ifelse(dotw %in% c("Sat", "Sun"), 1, 0)
+  )
+```
+
+### Temporal Train/Test Split
+```r
+train <- study.panel %>% filter(week < 19)
+test <- study.panel %>% filter(week >= 19)
+
+model <- lm(Trip_Count ~ lag1Hour + lag1day + Temperature + weekend, data = train)
+predictions <- predict(model, newdata = test)
+MAE <- mean(abs(test$Trip_Count - predictions))
+```
+
+## Questions & Challenges
+
+### Threshold Selection
+- Choosing "good enough" threshold depends on costs: What's worse—sending trucks unnecessarily or running out of bikes?
+- Asymmetric costs: False positive (truck waste) ≠ false negative (customer dissatisfaction)
+
+### Model Diagnostics for Logistic Regression
+- Equivalent to linear regression diagnostics but adapted: deviance residuals instead of raw residuals, calibration plots instead of residual plots
+- Use Hosmer-Lemeshow test for goodness of fit
+
+### Group-Specific Thresholds (Fairness Question)
+- Using different thresholds for different groups feels discriminatory but same threshold can amplify disparities
+- For bike share: If low-income neighborhoods have more variable demand, should we use different thresholds to ensure equal service?
+
+### Class Imbalance Handling
+- When outcomes are rare (e.g., 5% "station runs out"), accuracy is misleading
+- Better approaches: stratified splits, class weights, lower threshold to increase recall for rare class, use ROC/AUC instead of accuracy
+
+## Connections to Policy
+
+### Equity in Prediction
+- Errors cluster in certain neighborhoods (downtown, waterfront) and correlate with demographics
+- **Problem**: If downtown gets accurate predictions → better service → reinforces inequality
+- **Self-fulfilling loop**: Poor predictions in low-income areas → worse service → less usage → worse future predictions
+
+### When to Deploy
+- Deployment isn't binary; consider staged approach:
+  - Phase 1: Decision support (human reviews forecast)
+  - Phase 2: Automated for high-confidence predictions
+  - Phase 3: Broader automation
+- Before deployment: Audit error rates by neighborhood; monitor feedback loops
+
+## Reflection
+
+### I Understand
+- Why panel data structure is needed and how to build it
+- Why temporal lags matter and how to create them correctly
+- The temporal validation principle (train past → test future)
+
+### I Need More Practice
+- Choosing between competing models (Model 3 vs. 4 have different results—when to use which?)
+- Interpreting fixed effects (why do demographics disappear in Model 4?)
+- Handling practical edge cases (new stations, zero-demand stations, regime changes)
+
+### Next Steps
+1. Code the full pipeline from scratch without notes
+2. Apply to different domain (crime, housing, health)
+3. Systematically measure fairness: calculate errors by demographics and write up findings
+

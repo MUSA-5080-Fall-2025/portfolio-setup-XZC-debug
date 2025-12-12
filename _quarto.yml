@@ -38,6 +38,10 @@ website:
             text: Weekly Notes 9
           - href: weekly-notes/week-10-notes.html
             text: Weekly Notes 10
+          - href: weekly-notes/week-11-notes.html
+            text: Weekly Notes 11
+          - href: weekly-notes/week-12-notes.html
+            text: Weekly Notes 12
       - text: Assignments
         menu:
           - href: assignments/assignment_1/census_quality.qmd
